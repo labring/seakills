@@ -238,6 +238,7 @@ Using `IMAGE_REF`, detected ports, env vars, and the Sealos rules, generate `tem
 - `imagePullPolicy: IfNotPresent`
 - `revisionHistoryLimit: 1`
 - `automountServiceAccountToken: false`
+- **App CRD** (last resource): only `spec.data.url`, `spec.displayType`, `spec.icon`, `spec.name`, `spec.type` — no other fields (no `menuData`, `nameColor`, `template`, etc.)
 
 ### 5.3 Validate
 
@@ -257,8 +258,8 @@ If Python is not available, validate manually by checking the MUST rules above a
 The template deploy API uses a fixed `template.` subdomain prefix on the region domain:
 
 ```
-Region:     https://192.168.12.53.nip.io
-Deploy URL: https://template.192.168.12.53.nip.io/api/v2alpha/templates
+Region:     https://<region-domain>
+Deploy URL: https://template.<region-domain>/api/v2alpha/templates
 ```
 
 Extract the region from `~/.sealos/auth.json` (saved during preflight auth):
@@ -335,9 +336,79 @@ rm -f /tmp/sealos-deploy-body.json
 | 401 | Unauthorized — invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login` |
 | 409 | Conflict — instance already exists | Inform user, suggest different app name |
 | 422 | K8s rejected resource spec | Fix template based on error details |
-| 500/503 | Server/cluster error | Retry once after 5s |
+| 500/503 | Template service unavailable | **Fall back to kubectl (6.4)** |
 
 On 201 success, extract the app access URL from the response and present to user.
+
+### 6.4 Fallback: kubectl apply (when Template API is unavailable)
+
+If the Template API returns 503/500 or is unreachable, deploy directly via kubectl using the local kubeconfig.
+
+**Step 1 — Gather cluster context:**
+```bash
+# User namespace
+NAMESPACE=$(KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify config view --minify -o jsonpath='{.contexts[0].context.namespace}')
+
+# Cluster domain (from region URL)
+CLOUD_DOMAIN=$(cat ~/.sealos/auth.json | grep -o '"region":"[^"]*"' | cut -d'"' -f4 | sed 's|https://||')
+
+# TLS secret name (from existing ingress, or default)
+CERT_SECRET=$(KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify get ingress -n "$NAMESPACE" -o jsonpath='{.items[0].spec.tls[0].secretName}' 2>/dev/null || echo "wildcard-cert")
+```
+
+**Step 2 — Render template variables:**
+
+The template YAML from Phase 5 contains `${{ }}` variables. The AI must replace them with actual values:
+
+| Variable | Value |
+|----------|-------|
+| `${{ defaults.app_name }}` | Generate: `<app>-<random8>` (e.g., `edict-xn22k4ie`) |
+| `${{ defaults.app_host }}` | Generate: `<app>-<random8>` (e.g., `edict-2v4jryz1`) |
+| `${{ random(N) }}` | Random alphanumeric string of length N |
+| `${{ SEALOS_CLOUD_DOMAIN }}` | `CLOUD_DOMAIN` from Step 1 |
+| `${{ SEALOS_CERT_SECRET_NAME }}` | `CERT_SECRET` from Step 1 |
+| `${{ SEALOS_NAMESPACE }}` | `NAMESPACE` from Step 1 |
+
+The AI reads the template YAML, performs all variable substitutions, and produces rendered K8s resource documents.
+
+**Step 3 — Split and apply:**
+
+The rendered YAML is a multi-document file (separated by `---`). Split it into individual resources:
+
+1. **Skip** the first document (`kind: Template`) — this is the Sealos template metadata, not a K8s resource
+2. **Apply** the remaining documents (Deployment, Service, Ingress, App, etc.) via kubectl:
+
+```bash
+# AI writes the rendered resources (without the Template CR) to a temp file
+cat > /tmp/sealos-deploy-rendered.yaml << 'EOF'
+<rendered Deployment + Service + Ingress + App YAML>
+EOF
+
+KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify apply -f /tmp/sealos-deploy-rendered.yaml -n "$NAMESPACE"
+rm -f /tmp/sealos-deploy-rendered.yaml
+```
+
+**Step 4 — Handle apply errors:**
+
+| Error | Fix |
+|-------|-----|
+| `unknown field "spec.xxx"` in App CR | Remove the unknown field and retry |
+| PodSecurity warnings | Warnings are non-blocking — deployment still proceeds |
+| `Forbidden` | Kubeconfig may be expired — re-run auth |
+| `already exists` | Resource exists from a previous deploy — use `kubectl apply` (idempotent) |
+
+**Step 5 — Verify deployment:**
+```bash
+# Wait for pod to be ready (max 120s)
+KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
+  wait --for=condition=available deployment/<app-name> -n "$NAMESPACE" --timeout=120s
+
+# Get pod status
+KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
+  get pods -l app=<app-name> -n "$NAMESPACE"
+```
+
+App URL: `https://<app_host>.<CLOUD_DOMAIN>`
 
 ---
 

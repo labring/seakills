@@ -114,6 +114,40 @@ Application Ingress
 App
 ```
 
+### App CRD Specification (Important!)
+
+The `App` resource is the **last** resource in the template. It provides the Sealos dashboard entry point for the deployed application.
+
+**Complete and definitive schema — only these fields are valid:**
+
+```yaml
+apiVersion: app.sealos.io/v1
+kind: App
+metadata:
+  name: ${{ defaults.app_name }}
+  labels:
+    cloud.sealos.io/app-deploy-manager: ${{ defaults.app_name }}
+spec:
+  data:
+    url: https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}
+  displayType: normal
+  icon: <icon-url>
+  name: <human-readable app title>
+  type: link
+```
+
+**Allowed `spec` fields (exhaustive list):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `data.url` | string | **yes** | App access URL (Ingress host) |
+| `displayType` | string | no | Display mode (`normal`) |
+| `icon` | string | no | App icon URL |
+| `name` | string | no | Human-readable title shown in dashboard |
+| `type` | string | no | Entry type (`link`) |
+
+**Do NOT add any other fields.** Fields like `menuData`, `nameColor`, `template`, etc. do not exist in the App CRD and will cause `strict decoding error: unknown field` on apply.
+
 ## Defaults and Inputs Configuration Specification
 
 ### Basic Principles

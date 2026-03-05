@@ -2,9 +2,21 @@
 
 Detect the user's environment, record what's available, guide them to fix what's missing.
 
-## Step 1: Environment Detection
+## Step 1: Environment Detection (cached)
 
-Run all checks and record results:
+Environment info (tool versions) rarely changes. Cache it in `~/.sealos/env.json` to avoid re-detecting every run.
+
+### 1.1 Check Cache
+
+```bash
+cat ~/.sealos/env.json 2>/dev/null
+```
+
+If the file exists, check `cached_at` — if less than **24 hours** old, use cached values directly and **skip to Step 1.3** (Docker daemon check).
+
+### 1.2 Detect & Save (only when cache missing or expired)
+
+Run all checks:
 
 ```bash
 # Required
@@ -20,7 +32,22 @@ curl --version 2>/dev/null | head -1
 which jq 2>/dev/null
 ```
 
-Record the result as `ENV`:
+Save results to `~/.sealos/env.json`:
+```json
+{
+  "docker": "28.5.2",
+  "git": "2.39.5",
+  "node": "20.4.0",
+  "python": "3.9.6",
+  "curl": true,
+  "jq": true,
+  "cached_at": "2026-03-05T14:30:00Z"
+}
+```
+
+Version strings are present when installed, `null` when missing.
+
+Record as `ENV`:
 ```
 ENV.docker    = true/false
 ENV.git       = true/false
@@ -30,18 +57,23 @@ ENV.curl      = true/false
 ENV.jq        = true/false
 ```
 
-### Required — cannot proceed without these
+### 1.3 Docker Daemon Check (every run)
 
-**Docker:**
+Even with cached env, the Docker daemon might not be running. Always verify:
+
+```bash
+docker info 2>/dev/null
+```
+
 - Not installed → guide by platform:
   - macOS: `brew install --cask docker` then open Docker Desktop
   - Linux: `curl -fsSL https://get.docker.com | sh`
-- Installed but daemon not running (`docker info` fails) → "Please start Docker Desktop (macOS) or `sudo systemctl start docker` (Linux)."
+- Installed but daemon not running → "Please start Docker Desktop (macOS) or `sudo systemctl start docker` (Linux)."
 
-**git:**
-- Not installed → `brew install git` (macOS) or `sudo apt install git` (Linux)
+**git** — if missing (from cache or detection):
+- `brew install git` (macOS) or `sudo apt install git` (Linux)
 
-### Optional — scripts run faster, but AI can do the same work
+### Optional tools — scripts run faster, but AI can do the same work
 
 **Node.js:**
 - If missing, no problem. Pipeline uses fallback mode:
@@ -143,8 +175,15 @@ test -f ~/.sealos/kubeconfig && echo '{"authenticated":true}' || echo '{"authent
 node "<SKILL_DIR>/scripts/sealos-auth.mjs" login [region-url]
 ```
 
+If the script fails with `"error":"fetch failed"` or TLS/certificate error, retry with `--insecure`:
+```bash
+node "<SKILL_DIR>/scripts/sealos-auth.mjs" login [region-url] --insecure
+```
+
+If it still fails, fall back to curl (see below). **Once you switch to curl, use curl for the entire remaining flow** — do NOT mix curl and Node.js mid-flow.
+
 The script will:
-1. `POST <region>/api/auth/oauth2/device` with `client_id=sealos-deploy`
+1. `POST <region>/api/auth/oauth2/device` with the `client_id` from `config.json`
 2. Output a verification URL and user code to stderr
 3. Auto-open the browser for the user
 4. Poll `POST <region>/api/auth/oauth2/token` every 5s until approved
@@ -165,14 +204,24 @@ Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "..." }`
 
 **Without Node.js (curl fallback):**
 
+**Important: once you enter the curl path, complete ALL steps with curl. Do NOT switch to Node.js or Python mid-flow.**
+
+First, read constants from `<SKILL_DIR>/config.json`:
+```bash
+# Read skill constants (client_id, default_region)
+SKILL_CONFIG=$(cat "<SKILL_DIR>/config.json")
+CLIENT_ID=$(echo "$SKILL_CONFIG" | grep -o '"client_id":"[^"]*"' | cut -d'"' -f4)
+DEFAULT_REGION=$(echo "$SKILL_CONFIG" | grep -o '"default_region":"[^"]*"' | cut -d'"' -f4)
+```
+
 Step 1 — Request device authorization:
 ```bash
-REGION="${REGION:-https://192.168.12.53.nip.io}"
-# -k: skip TLS verification (dev environment uses self-signed cert)
+REGION="${REGION:-$DEFAULT_REGION}"
 DEVICE_RESP=$(curl -ksf -X POST "$REGION/api/auth/oauth2/device" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=sealos-deploy&grant_type=urn:ietf:params:oauth:grant-type:device_code")
+  -d "client_id=${CLIENT_ID}&grant_type=urn:ietf:params:oauth:grant-type:device_code")
 ```
+Note: `-k` skips TLS verification for self-signed certificates.
 
 Extract fields from response:
 ```bash
@@ -183,19 +232,21 @@ INTERVAL=$(echo "$DEVICE_RESP" | grep -o '"interval":[0-9]*' | cut -d: -f2)
 INTERVAL=${INTERVAL:-5}
 ```
 
-Step 2 — Tell user to open browser:
+Step 2 — Show the authorization link to user:
 ```
-Please open: $VERIFY_URL
+Please click the link below to authorize:
+$VERIFY_URL
 Authorization code: $USER_CODE
 ```
+If `VERIFY_URL` is empty, use `verification_uri` instead and show the user code separately.
 
 Step 3 — Poll for token:
 ```bash
 while true; do
   sleep "$INTERVAL"
-  TOKEN_RESP=$(curl -sf -X POST "$REGION/api/auth/oauth2/token" \
+  TOKEN_RESP=$(curl -ksf -X POST "$REGION/api/auth/oauth2/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "client_id=sealos-deploy&grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=$DEVICE_CODE")
+    -d "client_id=${CLIENT_ID}&grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=$DEVICE_CODE")
 
   # Check for access_token in response
   ACCESS_TOKEN=$(echo "$TOKEN_RESP" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
@@ -215,15 +266,24 @@ while true; do
 done
 ```
 
-Step 4 — Exchange token for kubeconfig:
+Step 4 — Exchange token for kubeconfig (still curl):
 ```bash
-KC_RESP=$(curl -sf -X POST "$REGION/api/auth/getDefaultKubeconfig" \
+KC_RESP=$(curl -ksf -X POST "$REGION/api/auth/getDefaultKubeconfig" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json")
 # Server returns { data: { kubeconfig } }
+# Extract kubeconfig — it's a multi-line YAML value inside JSON
 mkdir -p ~/.sealos
-echo "$KC_RESP" | grep -o '"kubeconfig":"[^"]*"' | cut -d'"' -f4 > ~/.sealos/kubeconfig
+node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf-8')); process.stdout.write(d.data.kubeconfig)" <<< "$KC_RESP" > ~/.sealos/kubeconfig 2>/dev/null \
+  || python3 -c "import sys,json; print(json.load(sys.stdin)['data']['kubeconfig'])" <<< "$KC_RESP" > ~/.sealos/kubeconfig
 chmod 600 ~/.sealos/kubeconfig
+```
+Note: kubeconfig is multi-line YAML embedded in JSON — simple grep won't work. Use node/python one-liner to extract it. Save auth metadata:
+```bash
+cat > ~/.sealos/auth.json << EOF
+{"region":"$REGION","authenticated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","auth_method":"oauth2_device_grant"}
+EOF
+chmod 600 ~/.sealos/auth.json
 ```
 
 ## Ready
@@ -236,7 +296,7 @@ Project:
   ✓ git: <BRANCH> ← <GITHUB_URL or "local only">
   ✓ README: <one-line summary of what the project does>
 
-Environment:
+Environment:                      (cached / refreshed)
   ✓ Docker <version>
   ✓ git <version>
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)

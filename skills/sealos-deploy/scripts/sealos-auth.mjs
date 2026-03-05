@@ -9,7 +9,7 @@
  *   node sealos-auth.mjs info                       # Show current auth info
  *
  * Environment variables:
- *   SEALOS_REGION   — Sealos Cloud region URL (default: https://192.168.12.53.nip.io)
+ *   SEALOS_REGION   — Sealos Cloud region URL (default from config.json)
  *
  * Flow:
  *   1. POST /api/auth/oauth2/device  → { device_code, user_code, verification_uri_complete }
@@ -21,18 +21,20 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
 import { execSync } from 'child_process'
 import { homedir, platform } from 'os'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
+// ── Paths ────────────────────────────────────────────────
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const SEALOS_DIR = join(homedir(), '.sealos')
 const KC_PATH = join(SEALOS_DIR, 'kubeconfig')
 const AUTH_PATH = join(SEALOS_DIR, 'auth.json')
 
-const DEFAULT_REGION = 'https://192.168.12.53.nip.io'
-
-// Pre-registered PUBLIC OAuth client for sealos-deploy skill
-// This client_id must be registered on Sealos Cloud as a PUBLIC client
-// with allowedGrantTypes: ["urn:ietf:params:oauth:grant-type:device_code"]
-const CLIENT_ID = 'af993c98-d19d-4bdc-b338-79b80dc4f8bf'
+// ── Skill constants (from config.json) ───────────────────
+const CONFIG_PATH = join(__dirname, '..', 'config.json')
+const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
+const CLIENT_ID = config.client_id
+const DEFAULT_REGION = config.default_region
 
 // ── Check ──────────────────────────────────────────────
 
@@ -269,7 +271,15 @@ function info () {
 
 // ── CLI ────────────────────────────────────────────────
 
-const [, , cmd, ...args] = process.argv
+const [, , cmd, ...rawArgs] = process.argv
+
+// --insecure flag: skip TLS certificate verification (for self-signed certs)
+const insecure = rawArgs.includes('--insecure')
+const args = rawArgs.filter(a => a !== '--insecure')
+
+if (insecure) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
 
 try {
   switch (cmd) {
@@ -296,6 +306,7 @@ try {
 Usage:
   node sealos-auth.mjs check              Check authentication status
   node sealos-auth.mjs login [region]     Start OAuth2 device login flow
+  node sealos-auth.mjs login --insecure   Skip TLS verification (self-signed cert)
   node sealos-auth.mjs info               Show current auth details
 
 Environment:
@@ -308,6 +319,11 @@ Flow:
     }
   }
 } catch (err) {
-  console.error(JSON.stringify({ error: err.message }))
+  // If TLS error and not using --insecure, hint the user
+  if (!insecure && (err.message.includes('fetch failed') || err.message.includes('self-signed') || err.message.includes('CERT'))) {
+    console.error(JSON.stringify({ error: err.message, hint: 'Try adding --insecure for self-signed certificates' }))
+  } else {
+    console.error(JSON.stringify({ error: err.message }))
+  }
   process.exit(1)
 }

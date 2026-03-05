@@ -33,13 +33,16 @@ Execute the modules in order:
 
 Every run MUST write a log file at `~/.sealos/logs/deploy-<YYYYMMDD-HHmmss>.log`.
 
-**At the start of execution**, create the log file:
+**At the very start of execution**, create the log file **once**:
 ```bash
 mkdir -p ~/.sealos/logs
 LOG_FILE=~/.sealos/logs/deploy-$(date +%Y%m%d-%H%M%S).log
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy started" > "$LOG_FILE"
 ```
 
-**At each phase boundary**, append a log entry with the Write/Edit tool or Bash `>>`:
+**Important: create the log file ONLY ONCE at the start. All subsequent writes MUST append (`>>`) to this same `$LOG_FILE`. Do NOT create a second log file.**
+
+**At each phase boundary**, append a log entry to the same file with Bash `>>`:
 ```
 [2026-03-05 14:30:01] === Phase 0: Preflight ===
 [2026-03-05 14:30:01] Docker: ✓ 27.5.1
