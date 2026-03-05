@@ -15,7 +15,7 @@
  *   1. POST /api/auth/oauth2/device  → { device_code, user_code, verification_uri_complete }
  *   2. User opens verification_uri_complete in browser to authorize
  *   3. Script polls /api/auth/oauth2/token until approved
- *   4. Receives access_token → exchanges for kubeconfig → saves to ~/.sealos/
+ *   4. Receives access_token → exchanges for kubeconfig → saves to ~/.sealos/kubeconfig
  */
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs'
@@ -47,8 +47,7 @@ function check () {
       return {
         authenticated: true,
         kubeconfig_path: KC_PATH,
-        region: auth.region || 'unknown',
-        namespace: auth.namespace || 'unknown'
+        region: auth.region || 'unknown'
       }
     }
   } catch { }
@@ -159,7 +158,7 @@ async function exchangeForKubeconfig (region, accessToken) {
   const res = await fetch(`${region}/api/auth/kubeconfig`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: accessToken,
       'Content-Type': 'application/json'
     }
   })
@@ -219,28 +218,24 @@ async function login (region = DEFAULT_REGION) {
 
   // Step 3: Exchange access token for kubeconfig
   const kcData = await exchangeForKubeconfig(region, accessToken)
-  const kubeconfig = kcData.kubeconfig
-  const namespace = kcData.namespace || ''
+  const kubeconfig = kcData.data?.kubeconfig
 
   if (!kubeconfig) {
-    throw new Error('API response missing kubeconfig field')
+    throw new Error('API response missing data.kubeconfig field')
   }
 
-  // Save kubeconfig
+  // Save kubeconfig to ~/.sealos/kubeconfig (Sealos-specific, avoids conflict with ~/.kube/config)
   mkdirSync(SEALOS_DIR, { recursive: true })
   writeFileSync(KC_PATH, kubeconfig, { mode: 0o600 })
-
-  // Save auth metadata
   writeFileSync(AUTH_PATH, JSON.stringify({
     region,
-    namespace,
     authenticated_at: new Date().toISOString(),
     auth_method: 'oauth2_device_grant'
   }, null, 2), { mode: 0o600 })
 
   process.stderr.write('Authentication successful!\n')
 
-  return { kubeconfig_path: KC_PATH, namespace, region }
+  return { kubeconfig_path: KC_PATH, region }
 }
 
 // ── Info ───────────────────────────────────────────────
@@ -256,7 +251,6 @@ function info () {
     authenticated: true,
     kubeconfig_path: KC_PATH,
     region: auth.region || 'unknown',
-    namespace: auth.namespace || 'unknown',
     auth_method: auth.auth_method || 'unknown',
     authenticated_at: auth.authenticated_at || 'unknown'
   }
@@ -299,7 +293,7 @@ Environment:
 Flow:
   1. Run "login" → opens browser for authorization
   2. Approve in browser → script receives token automatically
-  3. Token exchanged for kubeconfig → saved to ~/.sealos/`)
+  3. Token exchanged for kubeconfig → saved to ~/.sealos/kubeconfig`)
     }
   }
 } catch (err) {

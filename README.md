@@ -1,4 +1,4 @@
-# Sealos Deploy v1.0.1
+# Sealos Deploy v1.0.2
 
 One command to deploy any GitHub project to Sealos Cloud.
 

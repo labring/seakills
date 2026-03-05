@@ -151,7 +151,7 @@ The script will:
 5. Exchange the access token for kubeconfig
 6. Save to `~/.sealos/kubeconfig` (mode 0600)
 
-Stdout outputs JSON result: `{ "kubeconfig_path": "...", "namespace": "...", "region": "..." }`
+Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "..." }`
 
 **Without Node.js (curl fallback):**
 
@@ -206,10 +206,13 @@ done
 
 Step 4 — Exchange token for kubeconfig:
 ```bash
-curl -sf -X POST "$REGION/api/auth/kubeconfig" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -o ~/.sealos/kubeconfig && chmod 600 ~/.sealos/kubeconfig
+KC_RESP=$(curl -sf -X POST "$REGION/api/auth/kubeconfig" \
+  -H "Authorization: $ACCESS_TOKEN" \
+  -H "Content-Type: application/json")
+# Server returns { data: { kubeconfig } }
+mkdir -p ~/.sealos
+echo "$KC_RESP" | grep -o '"kubeconfig":"[^"]*"' | cut -d'"' -f4 > ~/.sealos/kubeconfig
+chmod 600 ~/.sealos/kubeconfig
 ```
 
 ## Ready
