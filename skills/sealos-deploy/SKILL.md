@@ -27,7 +27,7 @@ Deploy any GitHub project to Sealos Cloud — from source code to running applic
 Execute the modules in order:
 
 1. `modules/preflight.md` — Environment checks & Sealos auth
-2. `modules/pipeline.md` — Full deployment pipeline (Phase 1–5)
+2. `modules/pipeline.md` — Full deployment pipeline (Phase 1–6)
 
 ## Logging
 
@@ -68,7 +68,11 @@ LOG_FILE=~/.sealos/logs/deploy-$(date +%Y%m%d-%H%M%S).log
 
 [2026-03-05 14:30:31] === Phase 5: Template ===
 [2026-03-05 14:30:32] Output: template/repo/index.yaml
-[2026-03-05 14:30:32] === DONE ===
+
+[2026-03-05 14:30:33] === Phase 6: Deploy ===
+[2026-03-05 14:30:33] Deploy URL: https://template.192.168.12.53.nip.io/api/v2alpha/templates
+[2026-03-05 14:30:35] Status: 201 — deployed successfully
+[2026-03-05 14:30:35] === DONE ===
 ```
 
 **On error**, log the error details before stopping:
@@ -126,6 +130,7 @@ Paths used in pipeline.md follow the pattern:
 | 3 — Dockerfile | Generate Dockerfile if missing | Already has one → skip |
 | 4 — Build & Push | `docker buildx` → Docker Hub | — |
 | 5 — Template | Generate Sealos application template | — |
+| 6 — Deploy | Deploy template to Sealos Cloud | — |
 
 ## Decision Flow
 
@@ -155,5 +160,8 @@ Input (GitHub URL / local path)
 [Phase 5] Generate Sealos Template
   │
   ▼
-Done — output template YAML + imageRef
+[Phase 6] Deploy to Sealos Cloud ── 401 → re-auth
+  │                                  409 → instance exists
+  ▼
+Done — app deployed ✓
 ```

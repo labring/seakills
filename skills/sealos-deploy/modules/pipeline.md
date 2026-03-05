@@ -250,6 +250,97 @@ If Python is not available, validate manually by checking the MUST rules above a
 
 ---
 
+## Phase 6: Deploy to Sealos Cloud
+
+### 6.1 Construct Deploy URL
+
+The template deploy API uses a fixed `template.` subdomain prefix on the region domain:
+
+```
+Region:     https://192.168.12.53.nip.io
+Deploy URL: https://template.192.168.12.53.nip.io/api/v2alpha/templates
+```
+
+Extract the region from `~/.sealos/auth.json` (saved during preflight auth):
+```bash
+REGION=$(cat ~/.sealos/auth.json | grep -o '"region":"[^"]*"' | cut -d'"' -f4)
+REGION_DOMAIN=$(echo "$REGION" | sed 's|https://||')
+DEPLOY_URL="https://template.${REGION_DOMAIN}/api/v2alpha/templates"
+```
+
+### 6.2 Deploy Template
+
+Read kubeconfig, **encode it with `encodeURIComponent`**, and send as `Authorization` header.
+
+Request body only needs the `yaml` field — the full template YAML string.
+
+**With Node.js:**
+```bash
+node -e "
+const fs = require('fs');
+const os = require('os');
+const kc = fs.readFileSync(os.homedir() + '/.sealos/kubeconfig', 'utf-8');
+const yaml = fs.readFileSync('template/<app-name>/index.yaml', 'utf-8');
+fetch('$DEPLOY_URL', {
+  method: 'POST',
+  headers: {
+    'Authorization': encodeURIComponent(kc),
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ yaml })
+})
+.then(r => { console.log('Status:', r.status); return r.json(); })
+.then(d => console.log(JSON.stringify(d, null, 2)))
+.catch(e => console.error(e));
+"
+```
+
+**Without Node.js (curl fallback):**
+```bash
+# encodeURIComponent via Python (almost always available)
+KUBECONFIG_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))" < ~/.sealos/kubeconfig)
+
+# Build JSON body — use jq if available, otherwise AI constructs it
+TEMPLATE_YAML=$(cat template/<app-name>/index.yaml)
+jq -n --arg yaml "$TEMPLATE_YAML" '{yaml: $yaml}' | \
+  curl -sf -X POST "$DEPLOY_URL" \
+    -H "Authorization: $KUBECONFIG_ENCODED" \
+    -H "Content-Type: application/json" \
+    -d @-
+```
+
+**Without jq:**
+The AI should read the template YAML (already in context), construct the JSON body directly, write it to a temp file, and curl it:
+```bash
+# AI writes properly escaped JSON to temp file
+cat > /tmp/sealos-deploy-body.json << 'DEPLOY_EOF'
+{"yaml": "<AI inserts JSON-escaped template YAML here>"}
+DEPLOY_EOF
+
+curl -sf -X POST "$DEPLOY_URL" \
+  -H "Authorization: $KUBECONFIG_ENCODED" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/sealos-deploy-body.json
+
+rm -f /tmp/sealos-deploy-body.json
+```
+
+### 6.3 Handle Response
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| 201 | Deployed successfully | Report success to user |
+| 200 | Dry-run preview (dryRun: true) | Show preview |
+| 400 | Bad request — invalid YAML | Fix template and retry |
+| 401 | Unauthorized — invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login` |
+| 409 | Conflict — instance already exists | Inform user, suggest different app name |
+| 422 | K8s rejected resource spec | Fix template based on error details |
+| 500/503 | Server/cluster error | Retry once after 5s |
+
+On 201 success, extract the app access URL from the response and present to user.
+
+---
+
 ## Cleanup
 
 If `WORK_DIR` was created via `mktemp` (remote GitHub URL clone), remove it:
@@ -269,6 +360,7 @@ On success, present to user:
 ✓ Assessed: {language} + {framework}, score {N}/12 — {verdict}
 ✓ Image: {IMAGE_REF} ({source: existing/built})
 ✓ Template: template/{app-name}/index.yaml
+✓ Deployed to Sealos Cloud ({region})
 
-[full template YAML content]
+App URL: https://<app-access-url>
 ```

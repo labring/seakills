@@ -146,10 +146,20 @@ node "<SKILL_DIR>/scripts/sealos-auth.mjs" login [region-url]
 The script will:
 1. `POST <region>/api/auth/oauth2/device` with `client_id=sealos-deploy`
 2. Output a verification URL and user code to stderr
-3. **Tell the user**: "Please open this URL in your browser to authorize: `<verification_uri_complete>`"
+3. Auto-open the browser for the user
 4. Poll `POST <region>/api/auth/oauth2/token` every 5s until approved
 5. Exchange the access token for kubeconfig
 6. Save to `~/.sealos/kubeconfig` (mode 0600)
+
+**Important — AI must always show the clickable URL to the user:**
+Even though the script attempts to auto-open the browser, it may fail (e.g., headless environment, SSH session, sandbox restrictions).
+After running the script, YOU (the AI) must extract the verification URL from stderr output and display it as a clickable link to the user:
+```
+Please click the link below to authorize:
+<verification_uri_complete>
+Authorization code: <user_code>
+```
+This ensures the user can always complete authorization regardless of whether auto-open succeeded.
 
 Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "..." }`
 
@@ -158,7 +168,8 @@ Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "..." }`
 Step 1 — Request device authorization:
 ```bash
 REGION="${REGION:-https://192.168.12.53.nip.io}"
-DEVICE_RESP=$(curl -sf -X POST "$REGION/api/auth/oauth2/device" \
+# -k: skip TLS verification (dev environment uses self-signed cert)
+DEVICE_RESP=$(curl -ksf -X POST "$REGION/api/auth/oauth2/device" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=sealos-deploy&grant_type=urn:ietf:params:oauth:grant-type:device_code")
 ```
