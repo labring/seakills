@@ -1,6 +1,6 @@
 ---
 name: sealos-deploy
-version: "1.0"
+version: "1.0.1"
 description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated.
 triggers:
   - /sealos-deploy

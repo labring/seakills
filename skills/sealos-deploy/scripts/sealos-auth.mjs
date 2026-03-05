@@ -9,7 +9,7 @@
  *   node sealos-auth.mjs info                       # Show current auth info
  *
  * Environment variables:
- *   SEALOS_REGION   — Sealos Cloud region URL (default: https://cloud.sealos.run)
+ *   SEALOS_REGION   — Sealos Cloud region URL (default: https://192.168.12.53.nip.io)
  *
  * Flow:
  *   1. POST /api/auth/oauth2/device  → { device_code, user_code, verification_uri_complete }

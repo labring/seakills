@@ -170,7 +170,7 @@ Stdout outputs JSON result: `{ "kubeconfig_path": "...", "namespace": "...", "re
 
 Step 1 — Request device authorization:
 ```bash
-REGION="${REGION:-https://cloud.sealos.run}"
+REGION="${REGION:-https://192.168.12.53.nip.io}"
 DEVICE_RESP=$(curl -sf -X POST "$REGION/api/auth/oauth2/device" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=sealos-deploy&grant_type=urn:ietf:params:oauth:grant-type:device_code")
