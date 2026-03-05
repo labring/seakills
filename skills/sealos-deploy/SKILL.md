@@ -1,6 +1,6 @@
 ---
 name: sealos-deploy
-version: "1.0.2"
+version: "1.0.3"
 description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated.
 triggers:
   - /sealos-deploy
@@ -28,6 +28,61 @@ Execute the modules in order:
 
 1. `modules/preflight.md` — Environment checks & Sealos auth
 2. `modules/pipeline.md` — Full deployment pipeline (Phase 1–5)
+
+## Logging
+
+Every run MUST write a log file at `~/.sealos/logs/deploy-<YYYYMMDD-HHmmss>.log`.
+
+**At the start of execution**, create the log file:
+```bash
+mkdir -p ~/.sealos/logs
+LOG_FILE=~/.sealos/logs/deploy-$(date +%Y%m%d-%H%M%S).log
+```
+
+**At each phase boundary**, append a log entry with the Write/Edit tool or Bash `>>`:
+```
+[2026-03-05 14:30:01] === Phase 0: Preflight ===
+[2026-03-05 14:30:01] Docker: ✓ 27.5.1
+[2026-03-05 14:30:01] Node.js: ✓ 22.12.0
+[2026-03-05 14:30:02] Sealos auth: ✓ (region: https://192.168.12.53.nip.io)
+[2026-03-05 14:30:02] Project: /Users/dev/myapp (github: https://github.com/owner/repo)
+
+[2026-03-05 14:30:03] === Phase 1: Assess ===
+[2026-03-05 14:30:03] Score: 9/12 (good)
+[2026-03-05 14:30:03] Language: python, Framework: fastapi, Port: 8000
+[2026-03-05 14:30:03] Decision: CONTINUE
+
+[2026-03-05 14:30:04] === Phase 2: Detect Image ===
+[2026-03-05 14:30:05] Docker Hub: owner/repo:latest (arm64 only, no amd64)
+[2026-03-05 14:30:05] GHCR: not found
+[2026-03-05 14:30:05] Decision: no amd64 image → continue to Phase 3
+
+[2026-03-05 14:30:06] === Phase 3: Dockerfile ===
+[2026-03-05 14:30:06] Existing Dockerfile: none
+[2026-03-05 14:30:07] Generated: python-fastapi template, port 8000
+
+[2026-03-05 14:30:08] === Phase 4: Build & Push ===
+[2026-03-05 14:30:08] Docker Hub user: zhujingyang
+[2026-03-05 14:30:30] Build: ✓ zhujingyang/repo:20260305
+[2026-03-05 14:30:30] IMAGE_REF=zhujingyang/repo:20260305
+
+[2026-03-05 14:30:31] === Phase 5: Template ===
+[2026-03-05 14:30:32] Output: template/repo/index.yaml
+[2026-03-05 14:30:32] === DONE ===
+```
+
+**On error**, log the error details before stopping:
+```
+[2026-03-05 14:30:10] === ERROR ===
+[2026-03-05 14:30:10] Phase: 4 (Build & Push)
+[2026-03-05 14:30:10] Error: docker buildx build failed — "npm ERR! Missing script: build"
+[2026-03-05 14:30:10] Retry: 1/3
+```
+
+**At the very end**, tell the user where the log is:
+```
+Log saved to: ~/.sealos/logs/deploy-20260305-143001.log
+```
 
 ## Scripts
 
