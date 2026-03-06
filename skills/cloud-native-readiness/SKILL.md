@@ -1,10 +1,10 @@
-# Cloud Native Readiness Assessment Skill
-
 ---
 name: cloud-native-readiness
-description: "[Internal] Assess whether a project is ready for cloud-native deployment. Used by sealos-deploy skill."
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, WebFetch, Task, mcp__deepwiki__ask_question
+description: Assess whether a project is ready for cloud-native deployment. Evaluates statelessness, config, scalability, and produces a readiness score (0-12). Use when evaluating cloud-native readiness or "/cloud-native-readiness".
+allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 ---
+
+# Cloud Native Readiness Assessment Skill
 
 ## Overview
 

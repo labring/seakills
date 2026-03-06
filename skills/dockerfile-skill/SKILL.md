@@ -1,10 +1,10 @@
-# Dockerfile Generator Skill
+---
+name: dockerfile-skill
+description: Generate production-ready Dockerfile for any GitHub project. Supports monorepo, multi-stage builds, workspace detection, and iterative build-fix cycles. Use when user needs a Dockerfile or "/dockerfile".
+allowed-tools: Read Glob Grep Bash Write Edit WebFetch
+---
 
----
-name: dockerfile
-description: "[Internal] Generate production-ready Dockerfile for any GitHub project. Used by sealos-deploy skill."
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, WebFetch, mcp__deepwiki__ask_question
----
+# Dockerfile Generator Skill
 
 ## Overview
 

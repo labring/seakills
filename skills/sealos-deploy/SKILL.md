@@ -1,13 +1,11 @@
 ---
 name: sealos-deploy
-version: "1.0.4"
-description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated.
-triggers:
-  - /sealos-deploy
-  - deploy to sealos
-  - deploy this to sealos
-  - deploy this project to sealos
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit, WebFetch, mcp__deepwiki__ask_question
+description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated. Use when user says "deploy to sealos", "/sealos-deploy", or "deploy this project".
+compatibility: Requires Docker, git. Optional Node.js 18+, Python 3.8+.
+metadata:
+  author: zjy365
+  version: "1.0.4"
+allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 ---
 
 # Sealos Deploy

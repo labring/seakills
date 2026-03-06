@@ -6,7 +6,7 @@ REPO="zjy365/sealos-deploy"
 
 # Canonical install location — single source of truth
 CANONICAL_DIR="$HOME/.agents/skills"
-VERSION_FILE="$CANONICAL_DIR/.sealos-deploy-version"
+VERSION_FILE="$CANONICAL_DIR/sealos-deploy/.version"
 
 SKILLS=(
   "sealos-deploy"
