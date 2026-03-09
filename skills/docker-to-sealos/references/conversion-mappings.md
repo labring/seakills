@@ -778,5 +778,59 @@ spec:
 ### Configuration Files
 - Docker config files → ConfigMap (using vn- naming convention)
 
+### Public URL Configuration
+
+Many web apps need their external URL configured to avoid hardcoded `localhost` references.
+Without this, frontend API calls, OAuth callbacks, and webhook URLs will break in production.
+
+#### Detection
+Check source code/docs for:
+- Env vars: `BASE_URL`, `SITE_URL`, `APP_URL`, `NEXTAUTH_URL`, `PUBLIC_URL`, `EXTERNAL_URL`, `HOSTNAME`
+- Config files: node-config (`config/default.json`), PHP config, Rails `config/environments/production.rb`
+- Code patterns: `getConfig(.*[Uu]rl`, `homeUrl`, `baseUrl`, `siteUrl`, fallback to `http://localhost`
+
+#### Strategy A: Env Var (preferred when supported)
+When the app reads its public URL from an environment variable:
+```yaml
+- name: APP_URL  # use the app's actual env var name
+  value: https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}
+```
+
+#### Strategy B: ConfigMap (for file-based config systems)
+When the app reads its public URL from a config file (e.g., node-config, PHP config):
+
+1. Create ConfigMap with the minimal config override containing only the public URL
+2. Mount to the app's config directory using `subPath` to avoid overwriting other files
+3. Follow standard ConfigMap naming/label conventions
+
+```yaml
+# ConfigMap — only include the minimal config needed for public URL
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${{ defaults.app_name }}
+  labels:
+    app: ${{ defaults.app_name }}
+    cloud.sealos.io/app-deploy-manager: ${{ defaults.app_name }}
+data:
+  <config-filename>: |
+    <minimal config content with public URL set to
+     https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}>
+
+# Deployment volumeMount — use subPath to mount single file
+volumeMounts:
+  - name: app-config
+    mountPath: <app-config-dir>/<config-filename>
+    subPath: <config-filename>
+
+# Deployment volume
+volumes:
+  - name: app-config
+    configMap:
+      name: ${{ defaults.app_name }}
+```
+
+Real-world examples: see `sealos-deploy/knowledge/lessons-learned.md` (EverShop case study)
+
 ### Sensitive Information
 - Docker business env vars → `env[].value` (`defaults`/`inputs`)

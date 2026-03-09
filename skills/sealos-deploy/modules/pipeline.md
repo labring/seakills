@@ -242,6 +242,22 @@ If the project uses databases, also read:
 
 Using `IMAGE_REF`, detected ports, env vars, and the Sealos rules, generate `template/<app-name>/index.yaml`.
 
+**Public URL detection:**
+After generating the base template, check if the app needs its public URL configured:
+
+1. Search source code for common URL config patterns:
+   - Env vars: `BASE_URL`, `SITE_URL`, `APP_URL`, `NEXTAUTH_URL`, `PUBLIC_URL`, `EXTERNAL_URL`
+   - Config files: `getConfig(.*[Uu]rl`, `homeUrl`, `baseUrl`, `siteUrl` in config patterns
+   - Docker Compose env vars referencing `localhost` or placeholder URLs
+
+2. If public URL is needed via env var:
+   - Add the appropriate env var to the Deployment with value `https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}`
+
+3. If public URL is needed via config file (e.g., node-config):
+   - Create a ConfigMap with the minimal config file
+   - Add volumeMount and volume to the Deployment
+   - Follow ConfigMap MUST rules (labels, naming, ordering before Deployment)
+
 **Critical MUST rules (always apply):**
 - `metadata.name`: hardcoded lowercase, no variables
 - Image tag: exact version, **never `:latest`**

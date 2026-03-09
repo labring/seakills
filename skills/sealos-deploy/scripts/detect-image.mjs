@@ -197,6 +197,13 @@ async function detectExistingImage (githubUrl, workDir) {
   const dockerhub = await checkDockerHub(owner, repo)
   if (dockerhub) return { found: true, ...dockerhub }
 
+  // Fallback 1a: check <repo-name>/<repo-name> on Docker Hub (common pattern)
+  // e.g., GitHub: evershopcommerce/evershop → Docker Hub: evershop/evershop
+  if (repo !== owner) {
+    const dockerhubFallback = await checkDockerHub(repo, repo)
+    if (dockerhubFallback) return { found: true, ...dockerhubFallback }
+  }
+
   const ghcr = await checkGhcr(owner, repo)
   if (ghcr) return { found: true, ...ghcr }
 
