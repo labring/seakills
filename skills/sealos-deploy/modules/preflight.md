@@ -159,22 +159,26 @@ Uses RFC 8628 Device Authorization Grant — no token copy-paste needed.
 
 Before auth, let the user choose which Sealos Cloud region to deploy to.
 
-Read the default region from config:
+Read the default region and available regions from config:
 ```bash
-DEFAULT_REGION=$(cat "<SKILL_DIR>/config.json" | grep -o '"default_region":"[^"]*"' | cut -d'"' -f4)
+SKILL_CONFIG=$(cat "<SKILL_DIR>/config.json")
+DEFAULT_REGION=$(echo "$SKILL_CONFIG" | grep -o '"default_region":"[^"]*"' | cut -d'"' -f4)
 ```
 
-**Always ask the user to confirm or choose a region.** Present known options and allow custom input:
+**Always ask the user to confirm or choose a region.** Present the regions from `config.json` and allow custom input:
 
 ```
 Which Sealos Cloud region do you want to deploy to?
 
-  1. https://staging-usw-1.sealos.io  (US West - Staging)
-  2. https://cloud.sealos.io           (Production)
-  3. Enter a custom region URL
+  1. https://gzg.sealos.run  (default)
+  2. https://bja.sealos.run
+  3. https://hzh.sealos.run
+  4. Enter a custom region URL
 
-Default: https://staging-usw-1.sealos.io
+Default: https://gzg.sealos.run
 ```
+
+The region list comes from `config.json` `regions` array. If `regions` is not present, show only `default_region`.
 
 If the user has an existing `~/.sealos/auth.json`, read the previously used region and offer it as an option:
 ```bash

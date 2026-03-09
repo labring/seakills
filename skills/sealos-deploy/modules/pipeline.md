@@ -359,9 +359,9 @@ Write the updated template back to `template/<app-name>/index.yaml`.
 
 Record all user choices as `CONFIG` for use in Phase 6:
 ```
-CONFIG.inputs = { ADMIN_EMAIL: "admin@example.com", OPENAI_API_KEY: "sk-..." }
-CONFIG.defaults_overrides = {}  (if user wanted to change any defaults)
+CONFIG.args = { ADMIN_EMAIL: "admin@example.com", OPENAI_API_KEY: "sk-..." }
 ```
+These `args` will be passed to the Template API's `args` field (Phase 6.2), which overrides or supplies `spec.inputs` in the template.
 
 ### 5.5.5 Deployment Confirmation
 
@@ -390,25 +390,24 @@ The template deploy API uses a fixed `template.` subdomain prefix on the region 
 
 ```
 Region:     https://<region-domain>
-Deploy URL: https://template.<region-domain>/api/v2alpha/templates
+Deploy URL: https://template.<region-domain>/api/v2alpha/templates/raw
 ```
 
 Extract the region from `~/.sealos/auth.json` (saved during preflight auth):
 ```bash
 REGION=$(cat ~/.sealos/auth.json | grep -o '"region":"[^"]*"' | cut -d'"' -f4)
 REGION_DOMAIN=$(echo "$REGION" | sed 's|https://||')
-DEPLOY_URL="https://template.${REGION_DOMAIN}/api/v2alpha/templates"
+DEPLOY_URL="https://template.${REGION_DOMAIN}/api/v2alpha/templates/raw"
 ```
 
 ### 6.2 Deploy Template
 
 Read kubeconfig, **encode it with `encodeURIComponent`**, and send as `Authorization` header.
 
-Request body needs:
-- `yaml` — the full template YAML string
-- `inputs` — user-provided input values from Phase 5.5 (key-value object)
-
-The `inputs` field passes user configuration so the template engine can substitute `${{ inputs.xxx }}` variables.
+Request body fields:
+- `yaml` (required) — the full template YAML string
+- `args` (optional) — template variable key-value pairs that override or supply `spec.inputs` fields. Values from Phase 5.5 `CONFIG.args`.
+- `dryRun` (optional, boolean) — if true, validates resources against K8s API without creating anything. Returns 200 with preview.
 
 **With Node.js:**
 ```bash
@@ -417,15 +416,15 @@ const fs = require('fs');
 const os = require('os');
 const kc = fs.readFileSync(os.homedir() + '/.sealos/kubeconfig', 'utf-8');
 const yaml = fs.readFileSync('template/<app-name>/index.yaml', 'utf-8');
-// CONFIG.inputs from Phase 5.5
-const inputs = { ADMIN_EMAIL: 'user@example.com' };
+// CONFIG.args from Phase 5.5
+const args = { ADMIN_EMAIL: 'user@example.com' };
 fetch('$DEPLOY_URL', {
   method: 'POST',
   headers: {
     'Authorization': encodeURIComponent(kc),
     'Content-Type': 'application/json'
   },
-  body: JSON.stringify({ yaml, inputs })
+  body: JSON.stringify({ yaml, args })
 })
 .then(r => { console.log('Status:', r.status); return r.json(); })
 .then(d => console.log(JSON.stringify(d, null, 2)))
@@ -438,11 +437,11 @@ fetch('$DEPLOY_URL', {
 # encodeURIComponent via Python (almost always available)
 KUBECONFIG_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))" < ~/.sealos/kubeconfig)
 
-# Build JSON body with inputs — use jq if available
+# Build JSON body with args — use jq if available
 TEMPLATE_YAML=$(cat template/<app-name>/index.yaml)
 jq -n --arg yaml "$TEMPLATE_YAML" \
-  --argjson inputs '{"ADMIN_EMAIL":"user@example.com"}' \
-  '{yaml: $yaml, inputs: $inputs}' | \
+  --argjson args '{"ADMIN_EMAIL":"user@example.com"}' \
+  '{yaml: $yaml, args: $args}' | \
   curl -sf -X POST "$DEPLOY_URL" \
     -H "Authorization: $KUBECONFIG_ENCODED" \
     -H "Content-Type: application/json" \
@@ -452,9 +451,9 @@ jq -n --arg yaml "$TEMPLATE_YAML" \
 **Without jq:**
 The AI should read the template YAML (already in context), construct the JSON body directly, write it to a temp file, and curl it:
 ```bash
-# AI writes properly escaped JSON to temp file including inputs from Phase 5.5
+# AI writes properly escaped JSON to temp file including args from Phase 5.5
 cat > /tmp/sealos-deploy-body.json << 'DEPLOY_EOF'
-{"yaml": "<AI inserts JSON-escaped template YAML here>", "inputs": {"ADMIN_EMAIL": "user@example.com"}}
+{"yaml": "<AI inserts JSON-escaped template YAML here>", "args": {"ADMIN_EMAIL": "user@example.com"}}
 DEPLOY_EOF
 
 curl -sf -X POST "$DEPLOY_URL" \
@@ -467,17 +466,37 @@ rm -f /tmp/sealos-deploy-body.json
 
 ### 6.3 Handle Response
 
+All error responses use a unified format:
+```json
+{ "error": { "type": "...", "code": "...", "message": "...", "details": ... } }
+```
+
 | Status | Meaning | Action |
 |--------|---------|--------|
-| 201 | Deployed successfully | Report success to user |
-| 200 | Dry-run preview (dryRun: true) | Show preview |
-| 400 | Bad request — invalid YAML | Fix template and retry |
-| 401 | Unauthorized — invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login` |
-| 409 | Conflict — instance already exists | Inform user, suggest different app name |
-| 422 | K8s rejected resource spec | Fix template based on error details |
-| 500/503 | Template service unavailable | **Fall back to kubectl (6.4)** |
+| 201 | Deployed successfully | Extract instance name and resources from response |
+| 200 | Dry-run preview (`dryRun: true`) | Show resource preview and quota |
+| 400 | Validation error — `INVALID_PARAMETER` (missing yaml/name) or `INVALID_VALUE` (bad YAML, missing required args) | Read `error.message`, fix template or provide missing `args`, retry |
+| 401 | `AUTHENTICATION_REQUIRED` — missing or invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login` |
+| 403 | `FORBIDDEN` — insufficient permissions | Inform user, check kubeconfig namespace permissions |
+| 409 | `ALREADY_EXISTS` — instance already exists | Inform user, suggest different app name |
+| 422 | `RESOURCE_ERROR` — K8s rejected resource spec | Read `error.details` for K8s rejection reason, fix template |
+| 503 | `SERVICE_UNAVAILABLE` — K8s cluster unreachable | **Fall back to kubectl (6.4)** |
 
-On 201 success, extract the app access URL from the response and present to user.
+On 201 success, the response contains:
+```json
+{
+  "name": "myapp-abcdefgh",
+  "uid": "...",
+  "resourceType": "instance",
+  "displayName": "...",
+  "createdAt": "...",
+  "args": { ... },
+  "resources": [
+    { "name": "myapp-abcdefgh", "uid": "...", "resourceType": "deployment", "quota": { "cpu": 0.1, "memory": 0.25, "storage": 0, "replicas": 1 } }
+  ]
+}
+```
+Extract the instance name and present to user.
 
 ### 6.4 Fallback: kubectl apply (when Template API is unavailable)
 
@@ -504,7 +523,7 @@ The template YAML from Phase 5 contains `${{ }}` variables. The AI must replace 
 | `${{ defaults.app_name }}` | Generate: `<app>-<random8>` (e.g., `edict-xn22k4ie`) |
 | `${{ defaults.app_host }}` | Generate: `<app>-<random8>` (e.g., `edict-2v4jryz1`) |
 | `${{ defaults.<key> }}` | Other defaults: generate per their `value` pattern |
-| `${{ inputs.<key> }}` | User-provided values from Phase 5.5 `CONFIG.inputs` |
+| `${{ inputs.<key> }}` | User-provided values from Phase 5.5 `CONFIG.args` |
 | `${{ random(N) }}` | Random alphanumeric string of length N |
 | `${{ SEALOS_CLOUD_DOMAIN }}` | `CLOUD_DOMAIN` from Step 1 |
 | `${{ SEALOS_CERT_SECRET_NAME }}` | `CERT_SECRET` from Step 1 |

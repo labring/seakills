@@ -71,7 +71,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy started" > "$LOG_FILE"
 [2026-03-05 14:30:32] Output: template/repo/index.yaml
 
 [2026-03-05 14:30:33] === Phase 6: Deploy ===
-[2026-03-05 14:30:33] Deploy URL: https://template.<REGION_DOMAIN>/api/v2alpha/templates
+[2026-03-05 14:30:33] Deploy URL: https://template.<REGION_DOMAIN>/api/v2alpha/templates/raw
 [2026-03-05 14:30:35] Status: 201 — deployed successfully
 [2026-03-05 14:30:35] === DONE ===
 ```
