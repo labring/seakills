@@ -133,6 +133,7 @@ Paths used in pipeline.md follow the pattern:
 | 3 — Dockerfile | Generate Dockerfile if missing | Already has one → skip |
 | 4 — Build & Push | `docker buildx` → Docker Hub | — |
 | 5 — Template | Generate Sealos application template | — |
+| 5.5 — Configure | Guide user through app env vars and inputs | No inputs needed |
 | 6 — Deploy | Deploy template to Sealos Cloud | — |
 
 ## Decision Flow
@@ -161,6 +162,9 @@ Input (GitHub URL / local path)
   │
   ▼
 [Phase 5] Generate Sealos Template
+  │
+  ▼
+[Phase 5.5] Configure ── present env vars → ask user for inputs → confirm
   │
   ▼
 [Phase 6] Deploy to Sealos Cloud ── 401 → re-auth

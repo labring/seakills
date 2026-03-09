@@ -58,6 +58,18 @@ If the score is borderline (4-6), also read:
 
 Record for later phases: `language`, `framework`, `ports`, `env_vars`, `databases`, `has_dockerfile`
 
+**Env var classification** (for Phase 5.5 interactive configuration):
+When recording `env_vars`, also classify each one:
+- `auto` — can be auto-generated (random secrets, internal URLs, DB connections)
+- `required` — user must provide (external API keys, admin email, SMTP, OAuth)
+- `optional` — has sensible default, user may customize (log level, feature flags)
+
+Sources for env var detection:
+- `.env.example` or `.env.sample` — most reliable source of required env vars
+- `docker-compose.yml` `environment:` section
+- README sections about configuration/environment
+- Source code imports of `process.env.*` or `os.environ[]`
+
 ---
 
 ## Phase 2: Detect Existing Image
@@ -251,6 +263,125 @@ If Python is not available, validate manually by checking the MUST rules above a
 
 ---
 
+## Phase 5.5: Interactive Configuration
+
+After generating the template, guide the user through application configuration before deployment.
+This is a **critical** step — most applications need user-specific configuration to function properly.
+
+### 5.5.1 Extract Configuration from Template
+
+Parse the generated template YAML and categorize all environment variables and inputs:
+
+**Category A — Auto-managed (no user action needed):**
+- `defaults.*` values: `app_name`, `app_host`, random passwords/keys (`${{ random(N) }}`)
+- Database connections via `secretKeyRef`: host, port, username, password from Kubeblocks secrets
+- Object storage credentials via `secretKeyRef`
+- Composed URLs that reference auto-managed vars (e.g., `DATABASE_URL` built from `$(DB_HOST):$(DB_PORT)`)
+- Internal service FQDNs (`*.${{ SEALOS_NAMESPACE }}.svc.cluster.local`)
+
+**Category B — User-required inputs:**
+- Template `inputs` with `required: true` and no sensible default
+- Env vars with empty or placeholder values that the app cannot function without
+- Common examples: admin email, external API keys (OpenAI, SMTP credentials, OAuth client ID/secret)
+
+**Category C — Optional with defaults:**
+- Template `inputs` with `required: false` and reasonable defaults
+- Env vars user might want to customize but app works without changes
+- Common examples: log level, feature toggles, upload size limits, signup enabled/disabled
+
+**Category D — Fixed values (informational):**
+- Hardcoded env vars like `NODE_ENV=production`
+- Port numbers, internal paths
+
+### 5.5.2 Present Configuration Summary
+
+Display a structured summary to the user. Example:
+
+```
+Configuration for <app-name>:
+
+  Auto-configured (no action needed):
+    - APP_NAME: unique generated name
+    - DB credentials: from PostgreSQL service (auto-provisioned)
+    - SECRET_KEY: auto-generated 32-char random string
+    - REDIS_URL: auto-composed from service credentials
+
+  Requires your input:
+    1. ADMIN_EMAIL — Administrator email address (required)
+    2. OPENAI_API_KEY — OpenAI API key for AI features (required)
+    3. SMTP_HOST — SMTP server for sending emails (required if email needed)
+
+  Optional (defaults shown, customize if needed):
+    - LOG_LEVEL: "info"
+    - MAX_UPLOAD_SIZE: "10M"
+    - ENABLE_SIGNUP: "true"
+```
+
+### 5.5.3 Collect User Input
+
+**For required inputs:**
+1. Ask the user for each value
+2. If user doesn't have a value, explain what it's used for and how to obtain it
+   - Example: "OPENAI_API_KEY is needed for AI features. Get one at https://platform.openai.com/api-keys"
+3. If user wants to skip a feature-gating input (e.g., SMTP), explain which features will be unavailable and set an empty value
+
+**For optional inputs:**
+1. Show the default values
+2. Ask: "Do you want to change any of these? (press Enter to keep defaults)"
+3. Only update values the user explicitly wants to change
+
+**For unfamiliar env vars:**
+If the AI is unsure what a variable does, read the project README, `.env.example`, or source code to explain it to the user before asking for a value.
+
+### 5.5.4 Apply Configuration to Template
+
+Update the template's `inputs` section with user-provided values:
+
+```yaml
+# Before (generated)
+inputs:
+  ADMIN_EMAIL:
+    description: 'Administrator email address'
+    type: string
+    default: ''
+    required: true
+
+# After (user configured)
+inputs:
+  ADMIN_EMAIL:
+    description: 'Administrator email address'
+    type: string
+    default: 'admin@example.com'
+    required: true
+```
+
+Write the updated template back to `template/<app-name>/index.yaml`.
+
+Record all user choices as `CONFIG` for use in Phase 6:
+```
+CONFIG.inputs = { ADMIN_EMAIL: "admin@example.com", OPENAI_API_KEY: "sk-..." }
+CONFIG.defaults_overrides = {}  (if user wanted to change any defaults)
+```
+
+### 5.5.5 Deployment Confirmation
+
+Before proceeding to Phase 6, present a final summary and ask for confirmation:
+
+```
+Ready to deploy <app-name> to Sealos Cloud:
+
+  Image:    zhujingyang/app:20260309
+  Region:   https://cloud.sealos.io
+  Database: PostgreSQL 16 (auto-provisioned)
+  Config:   3 required inputs configured, 2 optional defaults kept
+
+  Proceed with deployment? (y/n)
+```
+
+Wait for user confirmation before continuing to Phase 6.
+
+---
+
 ## Phase 6: Deploy to Sealos Cloud
 
 ### 6.1 Construct Deploy URL
@@ -273,7 +404,11 @@ DEPLOY_URL="https://template.${REGION_DOMAIN}/api/v2alpha/templates"
 
 Read kubeconfig, **encode it with `encodeURIComponent`**, and send as `Authorization` header.
 
-Request body only needs the `yaml` field — the full template YAML string.
+Request body needs:
+- `yaml` — the full template YAML string
+- `inputs` — user-provided input values from Phase 5.5 (key-value object)
+
+The `inputs` field passes user configuration so the template engine can substitute `${{ inputs.xxx }}` variables.
 
 **With Node.js:**
 ```bash
@@ -282,13 +417,15 @@ const fs = require('fs');
 const os = require('os');
 const kc = fs.readFileSync(os.homedir() + '/.sealos/kubeconfig', 'utf-8');
 const yaml = fs.readFileSync('template/<app-name>/index.yaml', 'utf-8');
+// CONFIG.inputs from Phase 5.5
+const inputs = { ADMIN_EMAIL: 'user@example.com' };
 fetch('$DEPLOY_URL', {
   method: 'POST',
   headers: {
     'Authorization': encodeURIComponent(kc),
     'Content-Type': 'application/json'
   },
-  body: JSON.stringify({ yaml })
+  body: JSON.stringify({ yaml, inputs })
 })
 .then(r => { console.log('Status:', r.status); return r.json(); })
 .then(d => console.log(JSON.stringify(d, null, 2)))
@@ -301,9 +438,11 @@ fetch('$DEPLOY_URL', {
 # encodeURIComponent via Python (almost always available)
 KUBECONFIG_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))" < ~/.sealos/kubeconfig)
 
-# Build JSON body — use jq if available, otherwise AI constructs it
+# Build JSON body with inputs — use jq if available
 TEMPLATE_YAML=$(cat template/<app-name>/index.yaml)
-jq -n --arg yaml "$TEMPLATE_YAML" '{yaml: $yaml}' | \
+jq -n --arg yaml "$TEMPLATE_YAML" \
+  --argjson inputs '{"ADMIN_EMAIL":"user@example.com"}' \
+  '{yaml: $yaml, inputs: $inputs}' | \
   curl -sf -X POST "$DEPLOY_URL" \
     -H "Authorization: $KUBECONFIG_ENCODED" \
     -H "Content-Type: application/json" \
@@ -313,9 +452,9 @@ jq -n --arg yaml "$TEMPLATE_YAML" '{yaml: $yaml}' | \
 **Without jq:**
 The AI should read the template YAML (already in context), construct the JSON body directly, write it to a temp file, and curl it:
 ```bash
-# AI writes properly escaped JSON to temp file
+# AI writes properly escaped JSON to temp file including inputs from Phase 5.5
 cat > /tmp/sealos-deploy-body.json << 'DEPLOY_EOF'
-{"yaml": "<AI inserts JSON-escaped template YAML here>"}
+{"yaml": "<AI inserts JSON-escaped template YAML here>", "inputs": {"ADMIN_EMAIL": "user@example.com"}}
 DEPLOY_EOF
 
 curl -sf -X POST "$DEPLOY_URL" \
@@ -364,10 +503,14 @@ The template YAML from Phase 5 contains `${{ }}` variables. The AI must replace 
 |----------|-------|
 | `${{ defaults.app_name }}` | Generate: `<app>-<random8>` (e.g., `edict-xn22k4ie`) |
 | `${{ defaults.app_host }}` | Generate: `<app>-<random8>` (e.g., `edict-2v4jryz1`) |
+| `${{ defaults.<key> }}` | Other defaults: generate per their `value` pattern |
+| `${{ inputs.<key> }}` | User-provided values from Phase 5.5 `CONFIG.inputs` |
 | `${{ random(N) }}` | Random alphanumeric string of length N |
 | `${{ SEALOS_CLOUD_DOMAIN }}` | `CLOUD_DOMAIN` from Step 1 |
 | `${{ SEALOS_CERT_SECRET_NAME }}` | `CERT_SECRET` from Step 1 |
 | `${{ SEALOS_NAMESPACE }}` | `NAMESPACE` from Step 1 |
+
+**Important:** `${{ inputs.xxx }}` values come from the user in Phase 5.5. If any required input was not provided, the AI must ask the user now before proceeding.
 
 The AI reads the template YAML, performs all variable substitutions, and produces rendered K8s resource documents.
 
@@ -431,7 +574,16 @@ On success, present to user:
 ✓ Assessed: {language} + {framework}, score {N}/12 — {verdict}
 ✓ Image: {IMAGE_REF} ({source: existing/built})
 ✓ Template: template/{app-name}/index.yaml
+✓ Configured: {N} inputs set ({M} required, {K} optional)
 ✓ Deployed to Sealos Cloud ({region})
 
 App URL: https://<app-access-url>
 ```
+
+If any `inputs` were configured, also show:
+```
+Configuration applied:
+  ADMIN_EMAIL: admin@example.com
+  OPENAI_API_KEY: sk-***...*** (masked)
+```
+Mask sensitive values (API keys, passwords) — show only first 3 and last 3 characters.
