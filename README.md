@@ -1,6 +1,6 @@
-# Seakills v1.0.5
+# Seakills
 
-One command to deploy any GitHub project to Sealos Cloud.
+AI agent skills for Sealos Cloud — deploy any project, provision databases, object storage & more with one command.
 
 Works with **Claude Code**, **Gemini CLI**, **Codex** — any AI coding assistant with file and terminal access.
 
@@ -10,45 +10,28 @@ Works with **Claude Code**, **Gemini CLI**, **Codex** — any AI coding assistan
 curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | bash
 ```
 
-The installer automatically detects your installed AI tools and sets up skills for each one:
+The installer auto-detects your AI tools and sets up skills for each one.
 
-```
-Installing Seakills v1.0.5...
+**Supported agents:**
 
-Downloading...
-
-Installing skills...
-  ✓ sealos-deploy
-  ✓ dockerfile-skill
-  ✓ cloud-native-readiness
-  ✓ docker-to-sealos
-
-Linking to detected agents...
-  ✓ Claude Code → ~/.claude/skills (symlinked)
-  ✓ Gemini CLI → ~/.gemini/skills (symlinked)
-  ✓ Codex → ~/.codex/skills (symlinked)
-
-Seakills v1.0.5 ready.
-```
-
-**Supported tools:**
-
-| Tool | Global Skills Dir | Detection |
-|------|------------------|-----------|
+| Agent | Skills Dir | Detection |
+|-------|-----------|-----------|
 | Claude Code | `~/.claude/skills/` | `~/.claude` exists |
 | Gemini CLI | `~/.gemini/skills/` | `~/.gemini` exists |
 | Codex | `~/.codex/skills/` | `~/.codex` or `$CODEX_HOME` exists |
 
-Skills are installed once to `~/.agents/skills/` (canonical), then symlinked to each tool's directory. No duplication.
+Skills are installed once to `~/.agents/skills/` (canonical), then symlinked to each agent. No duplication.
 
-## Use
+## Skills
+
+### `/sealos-deploy` — Deploy any project
 
 ```
 /sealos-deploy                                       # deploy current project
 /sealos-deploy https://github.com/labring-sigs/kite  # deploy remote repo
 ```
 
-That's it. The skill handles everything:
+The skill handles everything:
 
 ```
 [preflight] ✓ Docker  ✓ Docker Hub  ✓ Sealos Cloud
@@ -58,7 +41,7 @@ That's it. The skill handles everything:
 [deploy]    ✓ Deployed to Sealos Cloud
 ```
 
-## What Happens
+**Pipeline:**
 
 ```
 Your project
@@ -87,47 +70,37 @@ Deploy to Sealos Cloud
 Done ✓
 ```
 
-## First Time Setup
+**First time setup:** On first use, the skill checks and guides you through Docker, Docker Hub login, and Sealos Cloud OAuth — all interactive, no manual token copy-paste.
 
-On first use, the skill checks your environment and guides you through setup:
+### Coming Soon
 
-1. **Docker** — needed to build images locally
-2. **Docker Hub** — where built images are pushed (`docker login`)
-3. **Sealos Cloud** — OAuth2 device grant flow (opens browser, no token copy-paste)
-
-All setup is interactive. The skill asks for what it needs, when it needs it.
+| Skill | Description |
+|-------|-------------|
+| `/sealos-database` | Provision and manage databases (PostgreSQL, MySQL, MongoDB, Redis) |
+| `/sealos-objectstorage` | Create and manage object storage buckets |
+| More | Every Sealos Cloud capability → an agent skill |
 
 ## Project Structure
 
 ```
 seakills/
 ├── install.sh                          # Multi-agent installer
-├── README.md
-└── skills/
-    ├── sealos-deploy/                  # Main skill — /sealos-deploy
-    │   ├── SKILL.md                    # Entry point & phase overview
-    │   ├── config.json                 # Skill constants (client_id, region)
-    │   ├── modules/
-    │   │   ├── preflight.md            # Docker + auth checks
-    │   │   └── pipeline.md             # Phase 1–6 pipeline
-    │   └── scripts/
-    │       └── sealos-auth.mjs         # Sealos Cloud auth (OAuth2 device grant)
-    │
-    ├── dockerfile-skill/               # Internal — Dockerfile generation
-    ├── cloud-native-readiness/         # Internal — readiness assessment
-    └── docker-to-sealos/              # Internal — Sealos template conversion
+├── skills/
+│   ├── sealos-deploy/                  # /sealos-deploy entry point
+│   │   ├── SKILL.md                    # Phase overview & orchestration
+│   │   ├── config.json                 # Regions, OAuth client config
+│   │   ├── modules/                    # Preflight & pipeline logic
+│   │   └── scripts/                    # Auth, image detection, build
+│   ├── dockerfile-skill/               # Dockerfile generation & build-fix
+│   ├── cloud-native-readiness/         # Readiness assessment (0-12 score)
+│   └── docker-to-sealos/              # Docker Compose → Sealos template
+└── site/                               # Landing page (seakills.run)
 ```
 
 ## Requirements
 
-**Required:**
-- Docker (for building images)
-- A Docker Hub account
-- A Sealos Cloud account
-
-**Optional (faster, but AI handles the same work if missing):**
-- Node.js 18+
-- Python 3.8+
+- Docker + Docker Hub account (for building & pushing images)
+- [Sealos Cloud](https://sealos.run) account
 
 ## License
 
