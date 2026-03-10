@@ -80,10 +80,15 @@ trap 'rm -rf "$tmp"' EXIT
 
 echo "Downloading..."
 if command -v git &>/dev/null; then
-  git clone --depth 1 "https://github.com/${REPO}.git" "$tmp/repo" 2>/dev/null
+  git clone --depth 1 --filter=blob:none --sparse \
+    "https://github.com/${REPO}.git" "$tmp/repo" 2>/dev/null
+  git -C "$tmp/repo" sparse-checkout set skills 2>/dev/null || true
 else
-  curl -fsSL "https://github.com/${REPO}/archive/main.tar.gz" | tar -xz -C "$tmp"
-  mv "$tmp"/seakills-main "$tmp/repo"
+  curl -fsSL "https://github.com/${REPO}/archive/main.tar.gz" \
+    | tar -xz -C "$tmp" "seakills-main/skills"
+  mkdir -p "$tmp/repo"
+  mv "$tmp"/seakills-main/skills "$tmp/repo/skills"
+  rm -rf "$tmp"/seakills-main
 fi
 echo ""
 
