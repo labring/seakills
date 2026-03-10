@@ -861,12 +861,24 @@ Read `deploy-out/context.json`, merge the following into the `deploy` key, then 
     "repo_name": "<REPO_NAME>",
     "url": "<public app URL>",
     "deployed_at": "<current ISO timestamp>",
-    "last_updated_at": "<current ISO timestamp>"
+    "last_updated_at": "<current ISO timestamp>",
+    "update_history": [
+      {
+        "timestamp": "<current ISO timestamp>",
+        "action": "deploy",
+        "image": "<IMAGE_REF>",
+        "method": "<template-api or kubectl-apply>",
+        "status": "success",
+        "note": "Initial deployment"
+      }
+    ]
   }
 }
 ```
 
 The `deployed` section is what **Deployment Mode Detection** reads on subsequent runs to decide between DEPLOY and UPDATE mode. Without it, every `/sealos-deploy` creates a new instance.
+
+The `update_history` array is append-only — every subsequent update (via Update Path) adds an entry. See the **Update History** section at the end of this file for the full schema and rules.
 
 Sources for each field:
 - `app_name`: from `deploy.instance` (Template API response) or the rendered `defaults.app_name` (kubectl apply)
@@ -1041,6 +1053,7 @@ KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
 Update `deploy-out/context.json`:
 - Set `deployed.current_image` to `NEW_IMAGE`
 - Set `deployed.last_updated_at` to current ISO timestamp
+- Append an entry to `deployed.update_history` (see Update History below)
 
 Present to user:
 ```
@@ -1060,6 +1073,8 @@ KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
   -n $NAMESPACE
 ```
 
+Append a **failed** entry to `deployed.update_history` (see Update History below).
+
 Report to user:
 ```
 ✗ Rollout failed — automatically rolled back to previous version.
@@ -1069,3 +1084,74 @@ Debug:
 ```
 
 Do NOT update `deployed.current_image` on failure — it stays at the old value.
+
+---
+
+## Update History
+
+Every update (successful or failed) appends an entry to `deployed.update_history` in `deploy-out/context.json`. This provides a traceable log of all changes to the deployment.
+
+```json
+{
+  "deployed": {
+    "app_name": "morphic-dc21ad72",
+    "current_image": "zhujingyang/morphic:20260310-143022",
+    "update_history": [
+      {
+        "timestamp": "2026-03-09T18:37:30Z",
+        "action": "deploy",
+        "image": "ghcr.io/miurla/morphic:668daf0e",
+        "method": "kubectl-apply",
+        "status": "success",
+        "note": "Initial deployment"
+      },
+      {
+        "timestamp": "2026-03-09T20:15:00Z",
+        "action": "set-env",
+        "changes": ["OPENAI_API_KEY=sk-***", "OPENAI_BASE_URL=https://..."],
+        "method": "kubectl-set-env",
+        "status": "success",
+        "note": "Fix: default openai provider not enabled"
+      },
+      {
+        "timestamp": "2026-03-10T14:30:22Z",
+        "action": "set-image",
+        "previous_image": "ghcr.io/miurla/morphic:668daf0e",
+        "image": "zhujingyang/morphic:20260310-143022",
+        "method": "kubectl-set-image",
+        "status": "success"
+      },
+      {
+        "timestamp": "2026-03-11T09:00:00Z",
+        "action": "set-image",
+        "previous_image": "zhujingyang/morphic:20260310-143022",
+        "image": "zhujingyang/morphic:20260311-090000",
+        "method": "kubectl-set-image",
+        "status": "failed",
+        "note": "CrashLoopBackOff — rolled back"
+      }
+    ]
+  }
+}
+```
+
+### History entry fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `timestamp` | yes | ISO 8601 timestamp of the operation |
+| `action` | yes | What changed: `deploy`, `set-image`, `set-env`, `patch`, `restart` |
+| `status` | yes | `success` or `failed` |
+| `method` | yes | kubectl command used: `kubectl-apply`, `kubectl-set-image`, `kubectl-set-env`, `kubectl-patch`, `kubectl-rollout-restart` |
+| `image` | if image changed | New image reference |
+| `previous_image` | if image changed | Image before the update |
+| `changes` | if env/config changed | Array of changes (mask sensitive values: `sk-***`) |
+| `note` | no | Free-text reason or context for the change |
+
+### Rules
+
+- **Always append, never rewrite** — history is append-only. Never delete or modify previous entries.
+- **Mask secrets** — API keys, passwords, tokens: show only first 3 chars + `***` (e.g., `sk-***`).
+- **Initial deploy counts** — the first entry should be `action: "deploy"` written by Phase 6 checkpoint.
+- **Failed updates count** — record failures so the user can see what was attempted and why it didn't work.
+- **Keep it bounded** — if history exceeds 50 entries, trim the oldest entries (keep the first `deploy` entry and the most recent 49).

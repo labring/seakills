@@ -1,6 +1,6 @@
 ---
 name: docker-to-sealos
-description: "[Internal] Convert Docker Compose or docs into Sealos templates. Used by sealos-deploy skill."
+description: "Convert Docker Compose files or installation docs into production-grade Sealos templates. Use when user says \"/docker-to-sealos\" or wants to convert a compose file to Sealos format."
 ---
 
 # Docker to Sealos Template Converter
