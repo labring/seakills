@@ -3,6 +3,7 @@ set -euo pipefail
 
 VERSION="1.0.5"
 REPO="zjy365/seakills"
+SITE_URL="https://seakills.gzg.sealos.run"
 
 # Canonical install location — single source of truth
 CANONICAL_DIR="$HOME/.agents/skills"
@@ -36,7 +37,7 @@ Usage:
   install.sh --help       Show this help
 
 Install:
-  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash
+  curl -fsSL ${SITE_URL}/install.sh | bash
 
 Supports: Claude Code, Gemini CLI, Codex, and other .agents-compatible tools.
 EOF
@@ -74,21 +75,34 @@ else
 fi
 echo ""
 
-# --- Download repo ---
+# --- Download skills ---
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 echo "Downloading..."
-if command -v git &>/dev/null; then
-  git clone --depth 1 --filter=blob:none --sparse \
-    "https://github.com/${REPO}.git" "$tmp/repo" 2>/dev/null
-  git -C "$tmp/repo" sparse-checkout set skills 2>/dev/null || true
-else
-  curl -fsSL "https://github.com/${REPO}/archive/main.tar.gz" \
-    | tar -xz -C "$tmp" "seakills-main/skills"
+DOWNLOADED=false
+
+# Try site tar (fast for users in China)
+if curl -fsSL --connect-timeout 5 "${SITE_URL}/skills/seakills-latest.tar.gz" \
+     -o "$tmp/skills.tar.gz" 2>/dev/null; then
   mkdir -p "$tmp/repo"
-  mv "$tmp"/seakills-main/skills "$tmp/repo/skills"
-  rm -rf "$tmp"/seakills-main
+  tar -xzf "$tmp/skills.tar.gz" -C "$tmp/repo" 2>/dev/null && DOWNLOADED=true
+fi
+
+# Fallback: GitHub
+if [ "$DOWNLOADED" = false ]; then
+  echo "  Site unavailable, falling back to GitHub..."
+  if command -v git &>/dev/null; then
+    git clone --depth 1 --filter=blob:none --sparse \
+      "https://github.com/${REPO}.git" "$tmp/repo" 2>/dev/null
+    git -C "$tmp/repo" sparse-checkout set skills 2>/dev/null || true
+  else
+    curl -fsSL "https://github.com/${REPO}/archive/main.tar.gz" \
+      | tar -xz -C "$tmp" "seakills-main/skills"
+    mkdir -p "$tmp/repo"
+    mv "$tmp"/seakills-main/skills "$tmp/repo/skills"
+    rm -rf "$tmp"/seakills-main
+  fi
 fi
 echo ""
 

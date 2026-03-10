@@ -8,3 +8,7 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
+
+# Build artifacts from package.sh
+public/skills/
+public/install.sh
