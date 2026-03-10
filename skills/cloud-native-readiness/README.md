@@ -23,7 +23,7 @@ A Claude Code skill that assesses whether a project is ready for cloud-native de
 
 ```bash
 # Clone to skills directory
-curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | bash
+curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash
 ```
 
 ## Usage

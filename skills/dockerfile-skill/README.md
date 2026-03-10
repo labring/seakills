@@ -5,7 +5,7 @@ A Claude Code skill that generates production-ready Dockerfiles with automatic b
 ## Install
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/zjy365/seakills/main/install.sh" | bash
+curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash
 ```
 
 ## Usage

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react"
 import { Check, Copy } from "lucide-react"
 
 const installCmd =
-  "curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | bash"
+  "curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash"
 
 export function Navbar() {
   const [copied, setCopied] = useState(false)

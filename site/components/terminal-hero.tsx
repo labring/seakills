@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { Check, Copy } from "lucide-react"
 import { motion } from "motion/react"
 
-const installCmd = "curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | bash"
+const installCmd = "curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash"
 
 export function TerminalHero() {
   const [copied, setCopied] = useState(false)

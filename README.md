@@ -7,7 +7,7 @@ Works with **Claude Code**, **Gemini CLI**, **Codex** — any AI coding assistan
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | bash
+curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash
 ```
 
 The installer auto-detects your AI tools and sets up skills for each one.
