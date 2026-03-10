@@ -1,4 +1,4 @@
-# Seakills v1.0.4
+# Seakills v1.0.5
 
 One command to deploy any GitHub project to Sealos Cloud.
 
@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/zjy365/seakills/main/install.sh | b
 The installer automatically detects your installed AI tools and sets up skills for each one:
 
 ```
-Installing Seakills v1.0.4...
+Installing Seakills v1.0.5...
 
 Downloading...
 
@@ -28,7 +28,7 @@ Linking to detected agents...
   ✓ Gemini CLI → ~/.gemini/skills (symlinked)
   ✓ Codex → ~/.codex/skills (symlinked)
 
-Seakills v1.0.4 ready.
+Seakills v1.0.5 ready.
 ```
 
 **Supported tools:**

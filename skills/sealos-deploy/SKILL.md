@@ -4,7 +4,7 @@ description: Deploy any GitHub project to Sealos Cloud in one command. Assesses 
 compatibility: Requires Docker, git. Optional Node.js 18+, Python 3.8+.
 metadata:
   author: zjy365
-  version: "1.0.4"
+  version: "1.0.5"
 allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 ---
 
