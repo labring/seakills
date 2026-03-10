@@ -27,6 +27,9 @@ git --version 2>/dev/null
 node --version 2>/dev/null
 python3 --version 2>/dev/null
 
+# Optional (enables in-place updates of deployed apps)
+kubectl version --client 2>/dev/null
+
 # Always available (system built-in)
 curl --version 2>/dev/null | head -1
 which jq 2>/dev/null
@@ -39,6 +42,7 @@ Save results to `~/.sealos/env.json`:
   "git": "2.39.5",
   "node": "20.4.0",
   "python": "3.9.6",
+  "kubectl": "1.31.0",
   "curl": true,
   "jq": true,
   "cached_at": "2026-03-05T14:30:00Z"
@@ -53,6 +57,7 @@ ENV.docker    = true/false
 ENV.git       = true/false
 ENV.node      = true/false   (18+ required)
 ENV.python    = true/false
+ENV.kubectl   = true/false
 ENV.curl      = true/false
 ENV.jq        = true/false
 ```
@@ -84,6 +89,10 @@ docker info 2>/dev/null
 
 **Python:**
 - If missing, Sealos template validation (Phase 5) uses AI self-check instead of `quality_gate.py`
+
+**kubectl:**
+- If available, enables in-place update of already-deployed apps (`kubectl set image`, `kubectl rollout`)
+- If missing, updates require a full re-deploy through the Template API
 
 ## Step 2: Project Context
 
@@ -337,6 +346,7 @@ Environment:                      (cached / refreshed)
   ✓ git <version>
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)
   ○ Python <version>          (or: ✗ Python — template validation via AI)
+  ○ kubectl <version>         (or: ✗ kubectl — update via re-deploy only)
 
 Auth:
   ✓ Sealos Cloud (<region>)
