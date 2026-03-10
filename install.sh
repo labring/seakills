@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="1.0.5"
+VERSION="1.1.0"
 REPO="zjy365/seakills"
 SITE_URL="https://seakills.gzg.sealos.run"
 
