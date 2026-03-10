@@ -68,7 +68,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy started" > "$LOG_FILE"
 [2026-03-05 14:30:30] IMAGE_REF=zhujingyang/repo:20260305
 
 [2026-03-05 14:30:31] === Phase 5: Template ===
-[2026-03-05 14:30:32] Output: template/repo/index.yaml
+[2026-03-05 14:30:32] Output: deploy-out/template/repo/index.yaml
 
 [2026-03-05 14:30:33] === Phase 6: Deploy ===
 [2026-03-05 14:30:33] Deploy URL: https://template.<REGION_DOMAIN>/api/v2alpha/templates/raw

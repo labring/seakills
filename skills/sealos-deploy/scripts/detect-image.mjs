@@ -4,7 +4,7 @@
  * Container Image Detection
  *
  * Detects existing container images for a GitHub project.
- * Checks Docker Hub, GHCR, and README references.
+ * Checks Docker Hub, GHCR, docker-compose, CI workflows, and README references.
  *
  * Usage:
  *   node detect-image.mjs <github-url> [work-dir]     # Remote repo
@@ -19,6 +19,19 @@ import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 
+// ── Infrastructure images to exclude ─────────────────────
+
+const INFRA_IMAGES = new Set([
+  'postgres', 'postgresql', 'mysql', 'mariadb', 'redis', 'mongo', 'mongodb',
+  'memcached', 'elasticsearch', 'rabbitmq', 'minio', 'nats', 'zookeeper',
+  'kafka', 'consul', 'vault', 'nginx', 'traefik', 'envoy', 'haproxy',
+])
+
+function isInfraImage (name) {
+  const lower = name.toLowerCase()
+  return INFRA_IMAGES.has(lower) || [...INFRA_IMAGES].some(inf => lower.startsWith(inf + ':') || lower === inf)
+}
+
 // ── GitHub URL Parser ──────────────────────────────────────
 
 function parseGithubUrl (url) {
@@ -27,6 +40,28 @@ function parseGithubUrl (url) {
 
   const httpsMatch = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/.*)?$/)
   if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] }
+
+  return null
+}
+
+// ── Image Reference Parser ────────────────────────────────
+
+function parseImageRef (raw) {
+  const s = raw.trim().replace(/^['"]|['"]$/g, '')
+  if (!s || s.startsWith('$') || s.startsWith('{')) return null
+
+  // ghcr.io/owner/repo:tag
+  const ghcrMatch = s.match(/^ghcr\.io\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)(?::([a-zA-Z0-9_.-]+))?$/)
+  if (ghcrMatch) return { registry: 'ghcr', owner: ghcrMatch[1], repo: ghcrMatch[2], tag: ghcrMatch[3] || null }
+
+  // docker.io/owner/repo:tag or owner/repo:tag
+  const dockerMatch = s.match(/^(?:docker\.io\/)?([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)(?::([a-zA-Z0-9_.-]+))?$/)
+  if (dockerMatch) {
+    const owner = dockerMatch[1]
+    const repo = dockerMatch[2]
+    if (owner === 'library') return null
+    return { registry: 'dockerhub', owner, repo, tag: dockerMatch[3] || null }
+  }
 
   return null
 }
@@ -150,6 +185,98 @@ async function checkGhcr (owner, repo) {
   }
 }
 
+// ── Docker Compose Image Extraction ────────────────────────
+
+function extractImagesFromCompose (workDir) {
+  const images = []
+  const composeNames = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']
+
+  for (const name of composeNames) {
+    const p = path.join(workDir, name)
+    if (!fs.existsSync(p)) continue
+
+    const content = fs.readFileSync(p, 'utf-8')
+
+    // Match "image:" lines in docker-compose
+    for (const m of content.matchAll(/^\s*image:\s*['"]?([^\s'"#]+)['"]?/gm)) {
+      const ref = parseImageRef(m[1])
+      if (!ref) continue
+      if (isInfraImage(ref.repo) || isInfraImage(ref.owner)) continue
+      images.push(ref)
+    }
+
+    break // only read first compose file found
+  }
+
+  // Deduplicate
+  const seen = new Set()
+  return images.filter(img => {
+    const key = `${img.registry}:${img.owner}/${img.repo}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+// ── CI Workflow Image Extraction ───────────────────────────
+
+function extractImagesFromWorkflows (workDir) {
+  const images = []
+  const workflowDir = path.join(workDir, '.github', 'workflows')
+
+  if (!fs.existsSync(workflowDir)) return images
+
+  let files
+  try {
+    files = fs.readdirSync(workflowDir).filter(f => f.endsWith('.yml') || f.endsWith('.yaml'))
+  } catch {
+    return images
+  }
+
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(workflowDir, file), 'utf-8')
+
+    // Match: docker push <image>
+    for (const m of content.matchAll(/docker\s+push\s+['"]?([^\s'"$]+)['"]?/g)) {
+      const ref = parseImageRef(m[1])
+      if (ref) images.push(ref)
+    }
+
+    // Match: docker buildx ... --push ... -t <image>
+    for (const m of content.matchAll(/docker\s+buildx\s+[^]*?-t\s+['"]?([^\s'"$]+)['"]?/g)) {
+      const ref = parseImageRef(m[1])
+      if (ref) images.push(ref)
+    }
+
+    // Match: images: field (GitHub Actions docker/build-push-action)
+    for (const m of content.matchAll(/images:\s*['"]?([^\s'"#]+)['"]?/g)) {
+      const ref = parseImageRef(m[1])
+      if (ref) images.push(ref)
+    }
+
+    // Match: tags: field with full image references
+    for (const m of content.matchAll(/tags:\s*[|>]?\s*\n((?:\s+.+\n?)*)/g)) {
+      const block = m[1]
+      for (const line of block.split('\n')) {
+        const tagMatch = line.match(/^\s*-?\s*['"]?([^\s'"#$]+)['"]?\s*$/)
+        if (tagMatch) {
+          const ref = parseImageRef(tagMatch[1])
+          if (ref) images.push(ref)
+        }
+      }
+    }
+  }
+
+  // Deduplicate
+  const seen = new Set()
+  return images.filter(img => {
+    const key = `${img.registry}:${img.owner}/${img.repo}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 // ── README Image Extraction ────────────────────────────────
 
 function extractImagesFromReadme (workDir) {
@@ -170,6 +297,11 @@ function extractImagesFromReadme (workDir) {
         images.push({ registry: 'dockerhub', owner: m[1], repo: m[2], tag: m[3] || null })
       }
 
+      // Match hub.docker.com/r/<namespace>/<repo> URLs
+      for (const m of content.matchAll(/hub\.docker\.com\/r\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/g)) {
+        images.push({ registry: 'dockerhub', owner: m[1], repo: m[2], tag: null })
+      }
+
       break
     }
   }
@@ -184,6 +316,61 @@ function extractImagesFromReadme (workDir) {
   })
 }
 
+// ── Docker Hub Search + Verify ─────────────────────────────
+
+async function searchAndVerifyDockerHub (query, githubOwner, githubRepo) {
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10000)
+    const resp = await fetch(
+      `https://hub.docker.com/v2/search/repositories/?query=${encodeURIComponent(query)}&page_size=5`,
+      { signal: controller.signal },
+    )
+    clearTimeout(timer)
+
+    if (!resp.ok) return null
+    const data = await resp.json()
+    if (!data.results || data.results.length === 0) return null
+
+    const githubUrlPattern = new RegExp(`github\\.com[/:]${githubOwner}/${githubRepo}`, 'i')
+
+    for (const result of data.results) {
+      const ns = result.repo_owner || result.repo_name?.split('/')[0]
+      const repo = result.repo_name?.includes('/') ? result.repo_name.split('/')[1] : result.repo_name
+      if (!ns || !repo) continue
+
+      // Fetch detail to check full_description for GitHub URL
+      try {
+        const detailController = new AbortController()
+        const detailTimer = setTimeout(() => detailController.abort(), 10000)
+        const detailResp = await fetch(
+          `https://hub.docker.com/v2/repositories/${ns}/${repo}/`,
+          { signal: detailController.signal },
+        )
+        clearTimeout(detailTimer)
+
+        if (!detailResp.ok) continue
+        const detail = await detailResp.json()
+
+        const desc = (detail.full_description || '') + ' ' + (detail.description || '')
+        if (!githubUrlPattern.test(desc)) continue
+
+        // Verified match — check tags for amd64
+        const tagResult = await checkDockerHub(ns, repo)
+        if (tagResult) {
+          return { ...tagResult, source: 'dockerhub-search' }
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 // ── Orchestrator ───────────────────────────────────────────
 
 async function detectExistingImage (githubUrl, workDir) {
@@ -193,21 +380,52 @@ async function detectExistingImage (githubUrl, workDir) {
   }
   const { owner, repo } = parsed
 
-  // Strategy 1: Check by GitHub owner/repo name
+  // ── Phase 1: Direct name checks ──
+
+  // 1. Docker Hub <owner>/<repo>
   const dockerhub = await checkDockerHub(owner, repo)
   if (dockerhub) return { found: true, ...dockerhub }
 
-  // Fallback 1a: check <repo-name>/<repo-name> on Docker Hub (common pattern)
-  // e.g., GitHub: evershopcommerce/evershop → Docker Hub: evershop/evershop
+  // 2. Docker Hub <repo>/<repo> (common pattern: GitHub org ≠ Docker Hub namespace)
   if (repo !== owner) {
     const dockerhubFallback = await checkDockerHub(repo, repo)
     if (dockerhubFallback) return { found: true, ...dockerhubFallback }
   }
 
+  // 3. GHCR <owner>/<repo>
   const ghcr = await checkGhcr(owner, repo)
   if (ghcr) return { found: true, ...ghcr }
 
-  // Strategy 2: Extract image references from README
+  // ── Phase 2: Project file evidence ──
+
+  if (workDir) {
+    // 4. docker-compose.yml image: scan
+    const composeImages = extractImagesFromCompose(workDir)
+    for (const img of composeImages) {
+      if (img.registry === 'ghcr') {
+        const result = await checkGhcr(img.owner, img.repo)
+        if (result) return { found: true, ...result, source: 'compose' }
+      } else {
+        const result = await checkDockerHub(img.owner, img.repo)
+        if (result) return { found: true, ...result, source: 'compose' }
+      }
+    }
+
+    // 5. CI workflow docker push scan
+    const workflowImages = extractImagesFromWorkflows(workDir)
+    for (const img of workflowImages) {
+      if (img.registry === 'ghcr') {
+        const result = await checkGhcr(img.owner, img.repo)
+        if (result) return { found: true, ...result, source: 'ci-workflow' }
+      } else {
+        const result = await checkDockerHub(img.owner, img.repo)
+        if (result) return { found: true, ...result, source: 'ci-workflow' }
+      }
+    }
+  }
+
+  // ── Phase 3: README scan ──
+
   if (workDir) {
     const readmeImages = extractImagesFromReadme(workDir)
 
@@ -223,6 +441,11 @@ async function detectExistingImage (githubUrl, workDir) {
       }
     }
   }
+
+  // ── Phase 4: Docker Hub search + verify ──
+
+  const searchResult = await searchAndVerifyDockerHub(repo, owner, repo)
+  if (searchResult) return { found: true, ...searchResult }
 
   return { found: false }
 }
@@ -262,9 +485,23 @@ if (githubUrl) {
   const result = await detectExistingImage(githubUrl, workDir)
   console.log(JSON.stringify(result, null, 2))
 } else {
-  // No GitHub URL available — only do README scan
-  const readmeImages = extractImagesFromReadme(workDir)
-  for (const img of readmeImages) {
+  // No GitHub URL available — scan project files and README for image references
+  const allImages = [
+    ...extractImagesFromCompose(workDir),
+    ...extractImagesFromWorkflows(workDir),
+    ...extractImagesFromReadme(workDir),
+  ]
+
+  // Deduplicate across all sources
+  const seen = new Set()
+  const unique = allImages.filter(img => {
+    const key = `${img.registry}:${img.owner}/${img.repo}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  for (const img of unique) {
     let result
     if (img.registry === 'ghcr') {
       result = await checkGhcr(img.owner, img.repo)
@@ -272,7 +509,7 @@ if (githubUrl) {
       result = await checkDockerHub(img.owner, img.repo)
     }
     if (result) {
-      console.log(JSON.stringify({ found: true, ...result, source: `${result.source}-readme` }, null, 2))
+      console.log(JSON.stringify({ found: true, ...result, source: `${result.source}-local` }, null, 2))
       process.exit(0)
     }
   }

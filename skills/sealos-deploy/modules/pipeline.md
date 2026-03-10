@@ -1,10 +1,58 @@
 # Deployment Pipeline
 
-After preflight passes, execute Phase 1–5 in order.
+After preflight passes, execute Phase 1–6 in order.
 
 `SKILL_DIR` refers to the directory containing this skill's SKILL.md. Sibling skills are at `<SKILL_DIR>/../`.
 
 Use `ENV` from preflight to choose between script mode (Node.js available) and fallback mode (AI-native).
+
+## Artifact Directory
+
+All pipeline outputs are written under `deploy-out/` in `WORK_DIR`:
+
+```
+<WORK_DIR>/deploy-out/
+├── context.json                  ← pipeline state (shared across all phases)
+├── docker-build/
+│   └── build-result.json         ← Phase 4 build metadata
+└── template/
+    └── <app-name>/
+        └── index.yaml            ← Phase 5 Sealos template
+```
+
+**Note:** When reading dockerfile-skill modules (analyze.md, generate.md, build-fix.md), they reference `docker-build/` as their default output path. In this pipeline, always write to `deploy-out/docker-build/` instead. Similarly, template output goes to `deploy-out/template/` instead of `template/`.
+
+At the very start of the pipeline (before Phase 1), create the artifact directory and initialize the context file:
+
+```bash
+mkdir -p "$WORK_DIR/deploy-out"
+```
+
+Write `deploy-out/context.json` with the initial project section:
+```json
+{
+  "version": "1.0",
+  "created_at": "<ISO timestamp>",
+  "updated_at": "<ISO timestamp>",
+  "project": {
+    "github_url": "<GITHUB_URL>",
+    "work_dir": "<WORK_DIR>",
+    "repo_name": "<REPO_NAME>",
+    "branch": "<BRANCH or null>",
+    "is_git": true
+  }
+}
+```
+
+## Resume Detection
+
+Before starting Phase 1, check if `deploy-out/context.json` already exists in `WORK_DIR`:
+
+1. If exists, read it and report to user:
+   `"Found previous deployment context. Completed phases: {list phases with completed_at}."`
+2. Ask user: `"Resume from Phase {next incomplete phase}? Or restart from Phase 1?"`
+3. If resume → skip completed phases, use saved context values
+4. If restart → rename old file to `context.json.bak`, create fresh
 
 ---
 
@@ -70,6 +118,24 @@ Sources for env var detection:
 - README sections about configuration/environment
 - Source code imports of `process.env.*` or `os.environ[]`
 
+### Checkpoint: assess
+
+Read `deploy-out/context.json`, merge the following into the `assess` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `score` | Score model output `.score` |
+| `verdict` | Score model output `.verdict` |
+| `language` | Detected language |
+| `framework` | Detected framework |
+| `ports` | Array of detected ports |
+| `databases` | Array of detected database types |
+| `has_dockerfile` | Boolean |
+| `env_vars` | Dict of `{ name: { class, source, default? } }` |
+
+Also update `updated_at` in the root.
+
 ---
 
 ## Phase 2: Detect Existing Image
@@ -88,20 +154,58 @@ Output: `{ "found": true, "image": "...", "tag": "...", ... }` or `{ "found": fa
 **If Node.js not available (fallback — use curl):**
 
 1. Parse owner/repo from `GITHUB_URL` (if empty, try `git -C "$WORK_DIR" remote get-url origin`)
-2. If still no GitHub URL, skip Docker Hub / GHCR checks and only scan README for image references
-3. Docker Hub check:
+2. If still no GitHub URL, skip Docker Hub / GHCR checks and only scan project files for image references
+3. Docker Hub check (try `<owner>/<repo>`, then `<repo>/<repo>` if different):
 ```bash
 curl -sf "https://hub.docker.com/v2/namespaces/<owner>/repositories/<repo>/tags?page_size=10"
+# If not found and owner != repo:
+curl -sf "https://hub.docker.com/v2/namespaces/<repo>/repositories/<repo>/tags?page_size=10"
 ```
-3. GHCR check:
+4. GHCR check:
 ```bash
 TOKEN=$(curl -sf "https://ghcr.io/token?scope=repository:<owner>/<repo>:pull" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 curl -sf -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/<owner>/<repo>/tags/list"
 ```
-4. If neither found, search `README.md` for `ghcr.io/` or `docker run/pull` references with different owner
-5. For any candidate, verify amd64: `docker manifest inspect <image>:<tag>`
+5. **docker-compose.yml scan** — AI reads `docker-compose.yml` / `docker-compose.yaml` (already in Phase 1 context) and extracts `image:` fields. Exclude infrastructure images (postgres, mysql, redis, mongo, etc.). For each candidate, verify with curl against Docker Hub or GHCR.
+6. **CI workflow scan** — AI reads `.github/workflows/*.yml` and extracts `docker push` targets, `images:` fields, and `tags:` references. Verify each candidate.
+7. Search `README.md` for `ghcr.io/` references, `docker run/pull` commands, and `hub.docker.com/r/<ns>/<repo>` URLs
+8. **Docker Hub search API** (catch-all) — if nothing found above:
+```bash
+curl -sf "https://hub.docker.com/v2/search/repositories/?query=<repo>&page_size=5"
+# For each result, fetch detail and check if full_description mentions github.com/<owner>/<repo>
+curl -sf "https://hub.docker.com/v2/repositories/<ns>/<repo>/"
+```
+9. For any candidate, verify amd64: `docker manifest inspect <image>:<tag>`
 
 Prefer versioned tags (`v1.2.3`) over `latest`.
+
+### Phase 2 Post-Verification (AI)
+
+After Phase 2 produces a result, the AI should cross-validate:
+
+1. **If `source` is `dockerhub` or `ghcr`** (direct owner/repo match) — high confidence, no extra validation needed.
+2. **If `source` is `compose`, `ci-workflow`, `dockerhub-readme`, or `dockerhub-search`** — cross-check with project context:
+   - Does the README mention this image or its namespace?
+   - Does `docker-compose.yml` reference it?
+   - Does the Docker Hub repo description link back to this GitHub project?
+   - If multiple signals agree → high confidence. If only one signal → note as medium confidence in your assessment.
+3. **If `found: false`** — the AI should use its Phase 1 analysis context to attempt one more check: if Phase 1 identified a Docker image name from project docs or code that the script didn't find, try verifying it manually with curl.
+
+### Checkpoint: detect
+
+Read `deploy-out/context.json`, merge the following into the `detect` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `found` | Boolean from script output |
+| `image` | Image name (if found) |
+| `tag` | Tag (if found) |
+| `source` | Detection source: `dockerhub`, `ghcr`, `compose`, `ci-workflow`, `dockerhub-search`, etc. |
+| `platforms` | Array of platforms (if found) |
+| `confidence` | `high` for direct match, `medium` for indirect |
+
+If found, also set the top-level `image_ref` field to `{image}:{tag}`.
 
 **Decision:**
 - Found amd64 image → record `IMAGE_REF = {image}:{tag}`, **skip to Phase 5**
@@ -160,7 +264,20 @@ __pycache__
 *.md
 .vscode
 .idea
+deploy-out
 ```
+
+### Checkpoint: dockerfile
+
+Read `deploy-out/context.json`, merge the following into the `dockerfile` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `skipped` | Boolean — true if skipped (existing image in Phase 2) |
+| `reason` | Why skipped (if skipped) |
+| `action` | `existing`, `generated`, or `fixed` (if not skipped) |
+| `dockerfile_path` | Relative path to Dockerfile (if not skipped) |
 
 ---
 
@@ -218,7 +335,21 @@ If build fails:
 
 ### 4.3 Record Result
 
-On success, record `IMAGE_REF` from the build output.
+On success, record `IMAGE_REF` from the build output. The build result file is at `deploy-out/docker-build/build-result.json`.
+
+### Checkpoint: build
+
+Read `deploy-out/context.json`, merge the following into the `build` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `skipped` | Boolean — true if skipped (existing image in Phase 2) |
+| `reason` | Why skipped (if skipped) |
+| `image` | Full image reference including tag (if built) |
+| `build_result` | `deploy-out/docker-build/build-result.json` (if built) |
+
+Also set the top-level `image_ref` field to the built image reference.
 
 ---
 
@@ -240,7 +371,9 @@ If the project uses databases, also read:
 
 ### 5.2 Generate Template
 
-Using `IMAGE_REF`, detected ports, env vars, and the Sealos rules, generate `template/<app-name>/index.yaml`.
+Read `deploy-out/context.json` and use `image_ref`, `assess.ports`, `assess.databases`, and `assess.env_vars` as inputs.
+
+Generate the template at `deploy-out/template/<app-name>/index.yaml` (overrides the default `template/` path from docker-to-sealos skill).
 
 **Public URL detection:**
 After generating the base template, check if the app needs its public URL configured:
@@ -276,6 +409,17 @@ python "<SKILL_DIR>/../docker-to-sealos/scripts/quality_gate.py" 2>/dev/null
 ```
 
 If Python is not available, validate manually by checking the MUST rules above against the generated YAML.
+
+### Checkpoint: template
+
+Read `deploy-out/context.json`, merge the following into the `template` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `path` | `deploy-out/template/<app-name>/index.yaml` |
+| `resources` | Array of K8s resource kinds generated (e.g., `["Deployment", "Service", "Ingress", "App"]`) |
+| `databases_provisioned` | Array of database types (e.g., `["postgresql"]`) |
 
 ---
 
@@ -371,7 +515,7 @@ inputs:
     required: true
 ```
 
-Write the updated template back to `template/<app-name>/index.yaml`.
+Write the updated template back to `deploy-out/template/<app-name>/index.yaml`.
 
 Record all user choices as `CONFIG` for use in Phase 6:
 ```
@@ -395,6 +539,17 @@ Ready to deploy <app-name> to Sealos Cloud:
 ```
 
 Wait for user confirmation before continuing to Phase 6.
+
+### Checkpoint: config
+
+Read `deploy-out/context.json`, merge the following into the `config` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `auto_managed` | Array of auto-configured env var names |
+| `user_provided` | Dict of user-provided values `{ name: value }` |
+| `defaults_kept` | Dict of optional values kept at defaults `{ name: default_value }` |
 
 ---
 
@@ -431,7 +586,7 @@ node -e "
 const fs = require('fs');
 const os = require('os');
 const kc = fs.readFileSync(os.homedir() + '/.sealos/kubeconfig', 'utf-8');
-const yaml = fs.readFileSync('template/<app-name>/index.yaml', 'utf-8');
+const yaml = fs.readFileSync('deploy-out/template/<app-name>/index.yaml', 'utf-8');
 // CONFIG.args from Phase 5.5
 const args = { ADMIN_EMAIL: 'user@example.com' };
 fetch('$DEPLOY_URL', {
@@ -454,7 +609,7 @@ fetch('$DEPLOY_URL', {
 KUBECONFIG_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))" < ~/.sealos/kubeconfig)
 
 # Build JSON body with args — use jq if available
-TEMPLATE_YAML=$(cat template/<app-name>/index.yaml)
+TEMPLATE_YAML=$(cat deploy-out/template/<app-name>/index.yaml)
 jq -n --arg yaml "$TEMPLATE_YAML" \
   --argjson args '{"ADMIN_EMAIL":"user@example.com"}' \
   '{yaml: $yaml, args: $args}' | \
@@ -588,6 +743,19 @@ KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
 
 App URL: `https://<app_host>.<CLOUD_DOMAIN>`
 
+### Checkpoint: deploy
+
+Read `deploy-out/context.json`, merge the following into the `deploy` key, then write back:
+
+| Field | Source |
+|-------|--------|
+| `completed_at` | Current ISO timestamp |
+| `method` | `template-api` or `kubectl-apply` |
+| `instance` | Instance/app name in cluster |
+| `namespace` | K8s namespace |
+| `url` | Public app URL |
+| `region` | Sealos region URL |
+
 ---
 
 ## Cleanup
@@ -608,7 +776,7 @@ On success, present to user:
 ```
 ✓ Assessed: {language} + {framework}, score {N}/12 — {verdict}
 ✓ Image: {IMAGE_REF} ({source: existing/built})
-✓ Template: template/{app-name}/index.yaml
+✓ Template: deploy-out/template/{app-name}/index.yaml
 ✓ Configured: {N} inputs set ({M} required, {K} optional)
 ✓ Deployed to Sealos Cloud ({region})
 

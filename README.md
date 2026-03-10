@@ -54,7 +54,7 @@ That's it. The skill handles everything:
 [preflight] ✓ Docker  ✓ Docker Hub  ✓ Sealos Cloud
 [assess]    Go + net/http → suitable for deployment
 [detect]    Found ghcr.io/zxh326/kite:v0.4.0 (amd64) → skip build
-[template]  Generated template/kite/index.yaml
+[template]  Generated deploy-out/template/kite/index.yaml
 [deploy]    ✓ Deployed to Sealos Cloud
 ```
 
