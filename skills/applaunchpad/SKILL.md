@@ -5,87 +5,70 @@ description: >-
   create, list, update, scale, delete, start, stop, pause, restart apps,
   check status, manage ports, env vars, storage, config maps.
   Triggers on "deploy my app", "create an app on sealos", "scale my app",
-  "I need to deploy a container", "stop my app", "show my apps".
+  "I need to deploy a container", "stop my app", "show my apps",
+  "run a container", "launch a service", "manage my deployment",
+  "check my running apps", "update my app's image", "add storage to my app",
+  "host my app", "put this on the cloud", "I need a server for my API",
+  "spin up a container", "run this image", "set up a service on sealos".
+  Also trigger when user asks about running/hosting any containerized workload on Sealos.
 ---
 
-## Interaction Principle — MANDATORY
+## Interaction Principle
 
-**NEVER output a question as plain text. ALWAYS use `AskUserQuestion` with an `options` array.**
+**NEVER output a question as plain text. ALWAYS use `AskUserQuestion` with `options`.**
 
-This is a hard rule with zero exceptions:
-- Every time you need user input → call `AskUserQuestion` with `options`
-- Do NOT write a question as text output and wait — the user MUST see clickable options
-- Do NOT output explanatory prose and then ask a question as text — call `AskUserQuestion` instead
-- Keep text output before `AskUserQuestion` to one short sentence max (status update only)
+Claude Code's text output is non-interactive — if you write a question as plain text, the
+user has no clickable options and must guess how to respond. `AskUserQuestion` gives them
+clear choices they can click.
 
-**BAD** (never do this):
-```
-Please save your Sealos kubeconfig to a file and tell me the path.
-Download from Sealos Console > Settings > Kubeconfig...
-```
-
-**GOOD** (always do this):
-```
-AskUserQuestion(header="Kubeconfig", question="Where is your Sealos kubeconfig?", options=[...])
-```
-
-`AskUserQuestion` always adds an implicit "Other / Type something" option automatically,
-so the user can still type custom input when none of the options fit.
-
-**Free-text matching:** When the user types free text instead of clicking an option,
-match it to the closest option by intent. Examples:
-- "show all apps", "all apps" → treat as "Show all apps"
-- "deploy", "create" → treat as the Create option
-- "stop" → treat as the Pause option (AppLaunchpad uses "pause")
-
-Never re-ask the same question because the wording didn't match exactly.
+- Every question → `AskUserQuestion` with `options`. Keep any preceding text to one short status line.
+- `AskUserQuestion` adds an implicit "Other / Type something" option, so users can always type custom input.
+- **Free-text matching:** When the user types instead of clicking, match to the closest option by intent.
+  "show all apps" → "Show all apps"; "deploy" → Create option; "stop" → Pause option.
+  Never re-ask because wording didn't match exactly.
 
 ## Fixed Execution Order
 
 **ALWAYS follow these steps in this exact order. No skipping, no reordering.**
 
 ```
-Step 0: Check Memory       (try to restore auth from previous session)
-Step 1: Authenticate        (only if Step 0 has no valid memory)
+Step 0: Check Auth         (try existing config from previous session)
+Step 1: Authenticate        (only if Step 0 fails)
 Step 2: Route               (determine which operation the user wants)
 Step 3: Execute operation   (follow the operation-specific steps below)
-Step 4: Update Memory       (save state for next session)
 ```
 
 ---
 
-## Step 0: Check Memory
+## Step 0: Check Auth
 
-Check for memory file `sealos-applaunchpad.md` in the project's auto memory directory.
+The script auto-derives its API URL from `~/.sealos/auth.json` (saved by login)
+and reads credentials from `~/.sealos/kubeconfig`. No separate config file needed.
 
-**If memory file exists and contains `kubeconfig_path` + `api_url`:**
-1. Verify the kubeconfig file still exists at the saved path
-2. Run `node scripts/sealos-applaunchpad.mjs list` (auto-loads config) to test auth
-3. If works → skip Step 1. Greet with context:
+1. Run `node scripts/sealos-applaunchpad.mjs list`
+2. If works → skip Step 1. Greet with context:
    > Connected to Sealos. You have N apps running.
-4. If fails (401, file missing) → proceed to Step 1, mention the token may have expired
-
-**If no memory file or missing auth fields:**
-1. Run `node scripts/sealos-auth.mjs check`
-2. If `authenticated: true` → skip to Step 1b (init with `~/.sealos/kubeconfig`)
-3. If `authenticated: false` → proceed to Step 1a
+3. If fails (not authenticated, 401, connection error) → proceed to Step 1
 
 ---
 
 ## Step 1: Authenticate
 
-Run this step only if Step 0 found no valid memory.
+Run this step only if Step 0 failed.
 
 ### 1a. OAuth2 Login
 
-Run `node scripts/sealos-auth.mjs login`.
+Read `config.json` (in this skill's directory) for available regions and the default.
+Ask the user which region to connect to using `AskUserQuestion` with the regions as options.
+
+Run `node scripts/sealos-auth.mjs login {region_url}` (omit region_url for default).
 
 This command:
 1. Opens the user's browser to the Sealos authorization page
 2. Displays a user code and verification URL in stderr
 3. Polls until the user approves (max 10 minutes)
 4. Exchanges the token for a kubeconfig
-5. Saves to `~/.sealos/kubeconfig`
+5. Saves to `~/.sealos/kubeconfig` and `~/.sealos/auth.json` (with region)
 
 Display while waiting:
 > Opening browser for Sealos login... Approve the request in your browser.
@@ -98,38 +81,16 @@ Display while waiting:
 - question: "Browser login failed. Try again?"
 - options: ["Try again", "Cancel"]
 
-### 1b. Init (derive API URL + validate connection)
+### 1b. Verify connection
 
-Run `node scripts/sealos-applaunchpad.mjs init ~/.sealos/kubeconfig`. This single command:
-- Parses the kubeconfig, extracts the server URL
-- **Auto-probes** candidate API URLs (tries `applaunchpad.<domain>` with subdomain
-  variations) using auth (all endpoints require auth)
-- Saves config to `~/.config/sealos-applaunchpad/config.json`
-- Lists apps to verify auth
+After login, run `node scripts/sealos-applaunchpad.mjs list` to verify auth works.
 
-**If auto-detection fails** (error mentions "Could not auto-detect API URL"):
-`AskUserQuestion`:
-- header: "API URL"
-- question: "Could not auto-detect API URL. What is your Sealos domain?"
-- useDescription: "Find it in your browser URL bar when logged into Sealos Console (e.g., gzg.sealos.io)"
-- options: ["I'll check my Sealos Console"]
+**If auth error (401):** Token may have expired. Re-run `node scripts/sealos-auth.mjs login`.
 
-Then run: `node scripts/sealos-applaunchpad.mjs init ~/.sealos/kubeconfig https://applaunchpad.<domain>`
+**If success:** Display:
+> Connected to Sealos. You have N apps.
 
-**If `init` returns an `authError`** (has `apps: null`):
-The API URL is correct but the kubeconfig token has expired.
-
-1. Display:
-   > API connection successful, but your kubeconfig token has expired.
-2. Re-run `node scripts/sealos-auth.mjs login` to re-authenticate
-3. After login succeeds → re-run `node scripts/sealos-applaunchpad.mjs init ~/.sealos/kubeconfig`
-4. Clear the memory file's `Auth` section so stale credentials aren't reused.
-
-**If `init` succeeds fully** (has `apps`, no `authError`):
-The response includes `apps` and `profileName`. Display:
-> Connected to Sealos (`{profileName}`). You have N apps.
-
-Use `apps` in Step 3 instead of making a separate `list` call.
+Use the apps list in Step 3 instead of making a separate `list` call.
 
 ---
 
@@ -149,7 +110,6 @@ Determine the operation from user intent:
 | "restart" | Action (restart) |
 | "expand storage/add volume" | Storage Update |
 
-
 If ambiguous, ask one clarifying question.
 
 ---
@@ -158,35 +118,30 @@ If ambiguous, ask one clarifying question.
 
 ### Create
 
-**3a. Scan project context**
-
-Check the working directory for project files (package.json, go.mod, requirements.txt,
-Cargo.toml, Dockerfile, docker-compose.yml, etc.) to understand the tech stack.
-
-**3b. Ask name first**
+**3a. Ask name first**
 
 `AskUserQuestion`:
 - header: "Name"
 - question: "App name?"
-- options: generate 2-3 name suggestions from project dir name.
+- options: generate 2-3 name suggestions from what the user said (e.g., "deploy redis" → "redis", "redis-cache").
   If a name already exists (from list), avoid it and note the conflict.
 - Constraint: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`, max 63 chars
 
-**3c. Detect image**
+**3b. Determine image**
 
-- If Dockerfile exists: suggest building and pushing to a registry, or use detected base image
-- If docker-compose.yml exists: parse image field
-- If neither: recommend from `references/defaults.md` image table based on tech stack
+- If user provides a specific image name: use it directly
+- If user describes their tech stack (e.g., "a Next.js app"): recommend from `references/defaults.md` image table
+- If user has source code but no pre-built image: recommend `/sealos-deploy` instead
+- This skill deploys **pre-built images** only — do not scan the filesystem for Dockerfiles, docker-compose.yml, or project files
 
-**3d. Show recommended config and confirm**
+**3c. Show recommended config and confirm**
 
 Read `references/defaults.md` for resource presets and image recommendations.
 
 Auto-resolve config from context:
 - User's request (e.g., "deploy my Next.js app" → node:20-slim, port 3000)
-- Project tech stack from 3a
+- User's stated tech stack
 - Scale hints (e.g., "production app" → higher resources)
-- Memory preferences (e.g., last used image)
 
 Display the **recommended config summary**:
 
@@ -208,78 +163,29 @@ Then `AskUserQuestion`:
 - header: "Config"
 - question: "Create with this config?"
 - options:
-  1. "Create now (Recommended)" — accept all, proceed to 3e
-  2. "Customize" — go to 3d-customize flow
+  1. "Create now (Recommended)" — accept all, proceed to 3d
+  2. "Customize" — go to 3c-customize flow
 
-**3d-customize: Pick fields to change, then configure only those**
+**3c-customize:** Read `references/create-flow.md` and follow the customize flow there.
 
-`AskUserQuestion`:
-- header: "Customize"
-- question: "Which fields do you want to change?"
-- multiSelect: true
-- options: **(max 4 items)** — group into 4:
-  - "Image & Command — {current_image}"
-  - "Resources (CPU, Memory, Scaling) — {cpu}C / {mem}GB / {replicas}rep"
-  - "Networking (Ports) — {port_summary}"
-  - "Advanced (Env, ConfigMap, Storage)"
-
-When **"Image & Command"** selected:
-- Ask for imageName
-- If private registry needed: ask username, password, serverAddress
-- If launch command needed: ask command and args
-
-When **"Resources"** selected → ask sequentially:
-
-**CPU** → `AskUserQuestion`:
-- header: "CPU"
-- question: "CPU cores? (0.1-32)"
-- options: `0.2 (current), 0.5, 1, 2` cores. Mark current with "(current)".
-
-**Memory** → `AskUserQuestion`:
-- header: "Memory"
-- question: "Memory? (0.1-32 GB)"
-- options: `0.5 (current), 1, 2, 4` GB. Mark current with "(current)".
-
-**Scaling** → `AskUserQuestion`:
-- header: "Scaling"
-- question: "Fixed replicas or auto-scaling (HPA)?"
-- options:
-  1. "Fixed replicas (current)" → ask replica count
-  2. "Auto-scaling (HPA)" → ask target metric, value%, min, max
-
-If user explicitly mentions GPU or project context indicates ML/AI workload:
-**GPU** → `AskUserQuestion`:
-- header: "GPU"
-- question: "GPU type?"
-- options: `A100, V100, T4, Skip`
-
-When **"Networking"** selected:
-- Ask for port number, protocol (show enum: http, grpc, ws, tcp, udp, sctp)
-- If protocol is http/grpc/ws: ask isPublic toggle
-- Note: isPublic is only effective for http/grpc/ws protocols
-
-When **"Advanced"** selected:
-- Ask about env variables (name=value pairs)
-- Ask about configMap files (path + content)
-- Ask about storage volumes (name, path, size)
-
-After all fields, re-display the updated config summary and `AskUserQuestion`:
-- header: "Config"
-- question: "Create with this config?"
-- options:
-  1. "Create now (Recommended)"
-  2. "Customize" — re-run the customize flow
-
-**3e. Create and wait**
+**3d. Create and wait**
 
 Build JSON body and run `node scripts/sealos-applaunchpad.mjs create-wait '<json>'`.
 This creates the app and polls until `running` (timeout 2 minutes).
 
-**3f. Show access URLs**
+**3e. Show access URLs and offer integration**
 
 For public http/grpc/ws ports, display access URLs from the response:
 - `publicAddress` from each port in the response
 - `privateAddress` for internal access
+
+Then `AskUserQuestion`:
+- header: "Integration"
+- question: "Save access URL to your project?"
+- options:
+  1. "Add to .env" — append `APP_URL=https://...` (and `APP_PRIVATE_URL=...`) to `.env`
+  2. "Skip" — just show the info, don't write anything
+- When writing to `.env`, append, don't overwrite existing content.
 
 ---
 
@@ -405,46 +311,6 @@ If user clicks Cancel → abort.
 
 ---
 
-## Step 4: Update Memory
-
-After every successful operation, update the memory file named `sealos-applaunchpad.md`
-in the project's auto memory directory.
-
-**What to save and when:**
-
-| Event | Save |
-|-------|------|
-| Successful auth (Step 1) | `kubeconfig_path`, `api_url`, `namespace` |
-| After create | Add app to list |
-| After delete | Remove app from list |
-| After list/get | Refresh apps list with current state |
-
-**Memory file format:**
-
-```markdown
-# Sealos AppLaunchpad Memory
-
-## Auth
-- auth_method: oauth2
-- kubeconfig_path: ~/.sealos/kubeconfig
-- api_url: https://applaunchpad.gzg.sealos.io/api/v2alpha
-- namespace: ns-xxx
-
-## Apps
-- my-app: nginx:alpine, running, 0.2C/0.5GB/1rep
-- api-server: node:20-slim, running, 1C/2GB/3rep
-
-## Preferences
-- preferred_image: node:20-slim
-```
-
-**Rules:**
-- Create the file if it doesn't exist
-- Use Edit tool to update specific sections, don't overwrite the whole file unnecessarily
-- The apps list is a cache for quick reference — always verify with live API when accuracy matters
-
----
-
 ## Scripts
 
 Two entry points in `scripts/` (relative to this skill's directory):
@@ -459,52 +325,37 @@ node $SCRIPTS/sealos-auth.mjs login --insecure    # Skip TLS verification
 node $SCRIPTS/sealos-auth.mjs info                # Show auth details
 ```
 
-Single entry point for AppLaunchpad operations: `scripts/sealos-applaunchpad.mjs`.
-Zero external dependencies (Node.js only).
-TLS certificate verification is disabled (`rejectUnauthorized: false`) because Sealos
-clusters may use self-signed certificates. See `references/api-reference.md` for details.
+Zero external dependencies (Node.js only). TLS verification is disabled for self-signed certs.
 
-**The script is bundled with this skill — do NOT check if it exists. Just run it.**
+**The scripts are bundled with this skill — do NOT check if they exist. Just run them.**
 
-**Path resolution:** This skill's directory is listed in "Additional working directories"
-in the system environment. Use that path to locate the script. For example, if the
-additional working directory is `/Users/x/project/.claude/skills/sealos-applaunchpad/scripts`,
-then run: `node /Users/x/project/.claude/skills/sealos-applaunchpad/scripts/sealos-applaunchpad.mjs <command>`.
+**Path resolution:** Scripts are in this skill's `scripts/` directory. The full path is
+listed in the system environment's "Additional working directories" — use it directly.
 
-**Config auto-load priority:**
-1. `KUBECONFIG_PATH` + `API_URL` env vars (backwards compatible)
-2. `~/.config/sealos-applaunchpad/config.json` (saved by `init`)
-3. Error with hint to run `init`
+**Config resolution:** The script reads `~/.sealos/auth.json` (region) and `~/.sealos/kubeconfig`
+(credentials) — both created by `sealos-auth.mjs login`. Set `API_URL` env var to override
+for non-standard setups.
 
 ```bash
-# Use the absolute path from "Additional working directories" — examples below use SCRIPT as placeholder
-SCRIPT="/path/from/additional-working-dirs/sealos-applaunchpad.mjs"
+# Examples use SCRIPT as placeholder — replace with <SKILL_DIR>/scripts/sealos-applaunchpad.mjs
 
-# First-time setup — auto-probes API URL (needs auth), saves config, returns apps
-node $SCRIPT init ~/.sealos/kubeconfig
-
-# First-time setup with manual API URL (if auto-probe fails)
-node $SCRIPT init ~/.sealos/kubeconfig https://applaunchpad.your-domain.com
-
-# After init, no env vars needed — config is auto-loaded
+# After login, everything just works — API URL derived from auth.json region
 node $SCRIPT list
 node $SCRIPT get my-app
-node $SCRIPT create '{"image":{"imageName":"nginx:alpine"},"quota":{"cpu":0.2,"memory":0.5,"replicas":1},"ports":[{"number":80}]}'
-node $SCRIPT create-wait '{"name":"my-app","image":{"imageName":"nginx:alpine"},"quota":{"cpu":0.2,"memory":0.5,"replicas":1}}'
+node $SCRIPT create '{"name":"my-app","image":{"imageName":"nginx:alpine"},"quota":{"cpu":0.2,"memory":0.5,"replicas":1},"ports":[{"number":80}]}'
+node $SCRIPT create-wait '{"name":"my-app","image":{"imageName":"nginx:alpine"},"quota":{"cpu":0.2,"memory":0.5,"replicas":1},"ports":[{"number":80}]}'
 node $SCRIPT update my-app '{"quota":{"cpu":1,"memory":2}}'
 node $SCRIPT delete my-app
 node $SCRIPT start|pause|restart my-app
-
-# Storage management (incremental merge, expand only)
 node $SCRIPT update-storage my-app '{"storage":[{"path":"/var/data","size":"20Gi"}]}'
-
 ```
 
 ## Reference Files
 
 - `references/api-reference.md` — API endpoints, resource constraints, error formats. Read first.
 - `references/defaults.md` — Resource presets, image recommendations, config summary template. Read for create operations.
-- `references/openapi.json` — Complete OpenAPI spec. Read only for edge cases.
+- `references/create-flow.md` — Create customize flow (Image, Resources, Networking, Advanced). Read when user selects "Customize" during create.
+- `references/openapi.json` — Complete OpenAPI spec (~6000 lines). **DO NOT read this file in full.** Use `api-reference.md` instead — it covers all standard operations. Only read specific sections of `openapi.json` (with line-limited reads) if you need schema details not covered by `api-reference.md`.
 
 ## Error Handling
 
@@ -513,7 +364,7 @@ node $SCRIPT update-storage my-app '{"storage":[{"path":"/var/data","size":"20Gi
 | Scenario | Action |
 |----------|--------|
 | Kubeconfig not found | Run `node scripts/sealos-auth.mjs login` to authenticate |
-| Auth error (401) | Kubeconfig expired. Run `node scripts/sealos-auth.mjs login` to re-authenticate, then re-run `init`. |
+| Auth error (401) | Kubeconfig expired. Run `node scripts/sealos-auth.mjs login` to re-authenticate. |
 | Name conflict (409) | Suggest alternative name |
 | Invalid image | Check image name and registry access |
 | Storage shrink | Refuse, K8s limitation |
@@ -524,12 +375,10 @@ node $SCRIPT update-storage my-app '{"storage":[{"path":"/var/data","size":"20Gi
 
 - NEVER ask a question as plain text — ALWAYS use `AskUserQuestion` with options
 - NEVER ask user to manually download kubeconfig — always use `scripts/sealos-auth.mjs login`
-- NEVER run `test -f` on the skill script — it is always present, just run it
+- NEVER run `test -f` or `ls` on the skill scripts — they are always present, just run them
 - NEVER write kubeconfig to `~/.kube/config` — may overwrite user's existing config
 - NEVER echo kubeconfig content to output
-- NEVER delete without explicit name confirmation
 - NEVER construct HTTP requests inline — always use `scripts/sealos-applaunchpad.mjs`
-- NEVER update without GET first (complete replacement semantics for ports/env/configMap/storage)
+- NEVER delete without explicit name confirmation
+- When writing to `.env`, append, don't overwrite
 - Storage can only expand, never shrink
-- "stop" always maps to "pause" — explain this to the user
-- Ports, env, configMap, storage in update are COMPLETE REPLACEMENT — include all items to keep

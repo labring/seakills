@@ -54,7 +54,7 @@ options ("Type something", "Chat about this") which consume slots. More than 4 u
 options will be truncated and invisible to the user.
 
 When building options for `AskUserQuestion`:
-- **Name options**: generate 2-3 name suggestions from project dir + detected tech stack.
+- **Name options**: generate 2-3 name suggestions from what the user said.
   If a name already exists (from list), avoid it and note the conflict.
 - **CPU options**: max 4 items: 0.2, 0.5, 1, 2 cores.
 - **Memory options**: max 4 items: 0.5, 1, 2, 4 GB.
@@ -66,7 +66,7 @@ When building options for `AskUserQuestion`:
 
 ## Field Generation Rules
 
-- **Name**: `[project-directory-name]`, lowercased, truncated to 63 chars
+- **Name**: derive from user's request (e.g., "deploy redis" → "redis"). Do not scan the local filesystem for project directory names.
 - **Name constraint**: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`, max 63 chars
 
 ## GPU Note
@@ -90,28 +90,6 @@ HPA fields:
 - `minReplicas`: minimum number of replicas
 - `maxReplicas`: maximum number of replicas
 
-## Create API Field Reference (from openapi.json)
+## Create API Field Reference
 
-| Field | Required | Type | Constraint | Default |
-|-------|----------|------|------------|---------|
-| name | no | string | `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`, max 63 | "hello-world" |
-| image.imageName | yes (via image) | string | Docker image with tag | "nginx" |
-| image.imageRegistry | no | object/null | `{ username, password, serverAddress }` | null |
-| launchCommand.command | no | string | Container run command | — |
-| launchCommand.args | no | string[] | Command arguments | — |
-| quota.cpu | no | number | range: 0.1–32 | 0.2 |
-| quota.memory | no | number | range: 0.1–32 GB | 0.5 |
-| quota.replicas | no | number | enum: 1–20 | — |
-| quota.gpu | no | object | `{ vendor, type (required), amount }` | — |
-| quota.hpa | no | object | `{ target, value, minReplicas, maxReplicas }` | — |
-| ports[].number | yes | number | 1–65535 | 80 |
-| ports[].protocol | no | string | http\|grpc\|ws\|tcp\|udp\|sctp | http |
-| ports[].isPublic | no | boolean | only for http/grpc/ws | true |
-| env[].name | yes | string | env var name | — |
-| env[].value | no | string | env var value | — |
-| env[].valueFrom | no | object | `{ secretKeyRef: { key, name } }` | — |
-| configMap[].path | yes | string | mount path | — |
-| configMap[].value | no | string | file content | — |
-| storage[].name | yes | string | volume name | — |
-| storage[].path | yes | string | mount path | — |
-| storage[].size | no | string | e.g. "10Gi" | "1Gi" |
+See `api-reference.md` for the full field reference (Create and Update constraints).
