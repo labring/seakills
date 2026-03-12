@@ -4,7 +4,11 @@ description: >-
   Use when someone needs to deploy applications from templates on Sealos: browse
   templates, view template details, deploy from catalog, or deploy custom YAML.
   Triggers on "deploy perplexica", "show available templates", "deploy from template",
-  "list Sealos apps", "deploy this YAML", or "what apps can I deploy on Sealos".
+  "list Sealos apps", "deploy this YAML", "what apps can I deploy on Sealos",
+  "self-host X on Sealos", "deploy open-source app", "run X on Sealos",
+  "what templates are available", or "I need a database/AI tool/search engine on Sealos".
+  Also use when deploying custom template YAML files, Sealos Template CRDs, or
+  any application from the Sealos template catalog.
 ---
 
 ## Interaction Principle — MANDATORY
@@ -38,17 +42,22 @@ Step 3: Execute operation   (follow the operation-specific steps below)
 
 ---
 
-## Step 0: Check Auth
+## Step 0: Check Auth & Language
 
-The script auto-derives its API URL from `~/.sealos/auth.json` (saved by login)
-and reads credentials from `~/.sealos/kubeconfig`. No separate config file needed.
+The script auto-derives its API URL from `~/.sealos/auth.json` (saved by login),
+falling back to the default region in `config.json` for public operations.
+Credentials are read from `~/.sealos/kubeconfig` only when deploying.
 
-1. Run `node scripts/sealos-template.mjs list`
+**Language:** If the user writes in Chinese or mentions a Chinese region (gzg, bja, hzh),
+use `--language=zh` for all list/get commands. Otherwise default to English.
+
+1. Run `node scripts/sealos-template.mjs list` (works without auth — uses default region as fallback)
 2. If works → skip Step 1. Greet: "Connected to Sealos. N templates available."
    Use this result in Step 3 instead of calling list again.
-3. If fails (not authenticated, 401, connection error) → proceed to Step 1
+3. If fails (connection error) → proceed to Step 1
 
 **Note:** Browsing is public (no auth needed). Auth is only validated on deploy operations.
+First-time users can browse the full catalog without logging in.
 
 ---
 
@@ -99,7 +108,7 @@ Determine the operation from user intent:
 | "list/show/browse templates" | Browse |
 | "what apps can I deploy" | Browse |
 | "deploy X" / "I need X" | Deploy |
-| "deploy this YAML" / "deploy custom template" | Deploy Raw |
+| "deploy this YAML" / "deploy custom template" / "deploy this Sealos Template CRD" | Deploy Raw |
 | "show template details" / "what does X need" | Details |
 
 
@@ -198,23 +207,23 @@ listed in the system environment's "Additional working directories" — use it d
 **Config resolution:** The script reads `~/.sealos/auth.json` (region) and `~/.sealos/kubeconfig`
 (credentials) — both created by `sealos-auth.mjs login`.
 
-**Auth commands:**
+**Auth commands** (`$DIR` = this skill's `scripts/` directory):
 ```bash
-node $SCRIPTS/sealos-auth.mjs check              # Check if authenticated
-node $SCRIPTS/sealos-auth.mjs login               # Start OAuth2 login
-node $SCRIPTS/sealos-auth.mjs login --insecure    # Skip TLS verification
-node $SCRIPTS/sealos-auth.mjs info                # Show auth details
+node $DIR/sealos-auth.mjs check              # Check if authenticated
+node $DIR/sealos-auth.mjs login               # Start OAuth2 login
+node $DIR/sealos-auth.mjs login --insecure    # Skip TLS verification
+node $DIR/sealos-auth.mjs info                # Show auth details
 ```
 
 **Template commands:**
 ```bash
-node $SCRIPT list                          # list all templates (public, no auth)
-node $SCRIPT list --language=zh            # list in Chinese
-node $SCRIPT get perplexica                # get template details (public, no auth)
-node $SCRIPT get perplexica --language=zh  # get details in Chinese
-node $SCRIPT create '{"name":"my-app","template":"perplexica","args":{"OPENAI_API_KEY":"sk-xxx"}}'
-node $SCRIPT create-raw '{"yaml":"apiVersion: app.sealos.io/v1\nkind: Template\n...","dryRun":true}'
-node $SCRIPT create-raw /path/to/body.json  # read JSON body from file
+node $DIR/sealos-template.mjs list                          # list all templates (public, no auth)
+node $DIR/sealos-template.mjs list --language=zh            # list in Chinese
+node $DIR/sealos-template.mjs get perplexica                # get template details (public, no auth)
+node $DIR/sealos-template.mjs get perplexica --language=zh  # get details in Chinese
+node $DIR/sealos-template.mjs create '{"name":"my-app","template":"perplexica","args":{"OPENAI_API_KEY":"sk-xxx"}}'
+node $DIR/sealos-template.mjs create-raw '{"yaml":"apiVersion: app.sealos.io/v1\nkind: Template\n...","dryRun":true}'
+node $DIR/sealos-template.mjs create-raw /path/to/body.json  # read JSON body from file
 ```
 
 ## Reference Files

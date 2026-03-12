@@ -18,8 +18,9 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest } from 'node:http';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const KC_PATH = resolve(homedir(), '.sealos/kubeconfig');
 const AUTH_PATH = resolve(homedir(), '.sealos/auth.json');
@@ -27,26 +28,36 @@ const API_PATH = '/api/v2alpha'; // API version — update here if the version c
 
 // --- config ---
 
-function loadConfig() {
-  if (!existsSync(AUTH_PATH)) {
-    throw new Error('Not authenticated. Run: node sealos-auth.mjs login');
+// Default region fallback for unauthenticated operations (list/get)
+const SKILL_CONFIG_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'config.json');
+
+function loadConfig({ requireAuth = false } = {}) {
+  let region = null;
+
+  // Try to read region from auth.json (set by login)
+  if (existsSync(AUTH_PATH)) {
+    try {
+      const auth = JSON.parse(readFileSync(AUTH_PATH, 'utf-8'));
+      if (auth.region) region = auth.region;
+    } catch { /* ignore invalid auth.json for public operations */ }
   }
 
-  let auth;
-  try {
-    auth = JSON.parse(readFileSync(AUTH_PATH, 'utf-8'));
-  } catch {
-    throw new Error('Invalid auth.json. Run: node sealos-auth.mjs login');
+  // Fall back to default region from skill config.json for public operations
+  if (!region) {
+    try {
+      const skillConfig = JSON.parse(readFileSync(SKILL_CONFIG_PATH, 'utf-8'));
+      region = skillConfig.default_region;
+    } catch { /* no fallback available */ }
   }
 
-  if (!auth.region) {
-    throw new Error('No region in auth.json. Run: node sealos-auth.mjs login');
+  if (!region) {
+    throw new Error('No region configured. Run: node sealos-auth.mjs login');
   }
 
-  const regionUrl = new URL(auth.region);
+  const regionUrl = new URL(region);
   const apiUrl = `https://template.${regionUrl.hostname}${API_PATH}`;
 
-  if (!existsSync(KC_PATH)) {
+  if (requireAuth && !existsSync(KC_PATH)) {
     throw new Error(`Kubeconfig not found at ${KC_PATH}. Run: node sealos-auth.mjs login`);
   }
 
@@ -207,32 +218,35 @@ async function main() {
   }
 
   try {
-    const cfg = loadConfig();
     let result;
 
     switch (cmd) {
       case 'list': {
         const { flags } = parseFlags(args);
-        result = await listTemplates(cfg, flags.language || 'en');
+        const publicCfg = loadConfig();
+        result = await listTemplates(publicCfg, flags.language || 'en');
         break;
       }
 
       case 'get': {
         const { flags, positional } = parseFlags(args);
         if (!positional[0]) throw new Error('Template name required');
-        result = await getTemplate(cfg, positional[0], flags.language || 'en');
+        const publicCfg = loadConfig();
+        result = await getTemplate(publicCfg, positional[0], flags.language || 'en');
         break;
       }
 
       case 'create': {
         if (!args[0]) throw new Error('JSON body required');
-        result = await createInstance(cfg, args[0]);
+        const authCfg = loadConfig({ requireAuth: true });
+        result = await createInstance(authCfg, args[0]);
         break;
       }
 
       case 'create-raw': {
         if (!args[0]) throw new Error('JSON body or file path required');
-        result = await createRaw(cfg, args[0]);
+        const authCfg = loadConfig({ requireAuth: true });
+        result = await createRaw(authCfg, args[0]);
         break;
       }
 
