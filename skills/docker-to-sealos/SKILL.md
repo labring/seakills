@@ -161,7 +161,7 @@ If validation fails, fix template/rules/examples first.
 - Database cluster component resources must use `limits(cpu=500m,memory=512Mi)` and `requests(cpu=50m,memory=51Mi)` unless source docs explicitly require otherwise.
 - Secret naming:
   - MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
-  - Redis: `${{ defaults.app_name }}-redis-account-default`
+  - Redis: `${{ defaults.app_name }}-redis-redis-account-default`
   - Kafka: `${{ defaults.app_name }}-broker-account-admin`
   - Do not use legacy naming outside supported exceptions.
 

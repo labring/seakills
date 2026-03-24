@@ -42,7 +42,7 @@ DB_CONNECTION_INDICATOR_HINTS: Set[str] = {
 ENV_VALUE_REF_RE = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)")
 DB_COMPOSABLE_KEYS: Set[str] = {"endpoint", "host", "port", "username", "password"}
 REDIS_SERVICE_HOST_TEMPLATE_PATTERN = re.compile(
-    rf"^{APP_NAME_PLACEHOLDER}-redis-redis\.\$\{{\{{\s*SEALOS_NAMESPACE\s*\}}\}}\.svc(?:\.cluster\.local)?$"
+    rf"^{APP_NAME_PLACEHOLDER}-redis-redis-redis\.\$\{{\{{\s*SEALOS_NAMESPACE\s*\}}\}}\.svc(?:\.cluster\.local)?$"
 )
 REDIS_SERVICE_HOST_RUNTIME_PATTERN = re.compile(
     r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.svc(?:\.cluster\.local)?$"

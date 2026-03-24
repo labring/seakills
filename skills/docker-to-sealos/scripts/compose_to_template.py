@@ -44,14 +44,14 @@ DB_FQDN_BY_TYPE: Dict[str, str] = {
     "postgres": "${{ defaults.app_name }}-pg-postgresql.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
     "mysql": "${{ defaults.app_name }}-mysql-mysql.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
     "mongodb": "${{ defaults.app_name }}-mongo-mongodb.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
-    "redis": "${{ defaults.app_name }}-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
+    "redis": "${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
     "kafka": "${{ defaults.app_name }}-broker-kafka.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
 }
 DB_SECRET_NAME_BY_TYPE: Dict[str, str] = {
     "postgres": "${{ defaults.app_name }}-pg-conn-credential",
     "mysql": "${{ defaults.app_name }}-mysql-conn-credential",
     "mongodb": "${{ defaults.app_name }}-mongodb-account-root",
-    "redis": "${{ defaults.app_name }}-redis-account-default",
+    "redis": "${{ defaults.app_name }}-redis-redis-account-default",
     "kafka": "${{ defaults.app_name }}-broker-account-admin",
 }
 DB_ENV_HINTS_BY_TYPE: Dict[str, Tuple[str, ...]] = {

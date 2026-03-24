@@ -204,7 +204,7 @@ must_rules:
     enforcement:
       type: rule
       target: R007
-  - must: "Redis: `${{ defaults.app_name }}-redis-account-default`"
+  - must: "Redis: `${{ defaults.app_name }}-redis-redis-account-default`"
     enforcement:
       type: rule
       target: R007

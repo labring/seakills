@@ -491,7 +491,7 @@ env:
   - name: DB_HOST
     value: ${{ defaults.app_name }}-pg-postgresql.${{ SEALOS_NAMESPACE }}.svc.cluster.local
   - name: REDIS_HOST
-    value: ${{ defaults.app_name }}-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local
+    value: ${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local
 ```
 
 #### Or Using Secret
@@ -625,6 +625,30 @@ spec:
           command: ["/app/start.sh"]
           args: ["arg1", "arg2"]
 ```
+
+### Volume-Dependent Arguments (Important!)
+
+Docker Compose `command:` or `args` may reference paths that only exist because of a host volume mount in Compose. These paths may **not** exist inside the container image itself.
+
+**Example — compose mounts a host dir for log output:**
+```yaml
+# Docker Compose
+services:
+  app:
+    command: --log-dir /app/logs
+    volumes:
+      - ./logs:/app/logs     # host mount creates /app/logs
+```
+
+If the Sealos template does not provision a matching volume, the `/app/logs` directory will not exist and the container will crash at startup (e.g., `mkdir /app/logs: no such file or directory`).
+
+**Resolution — check before converting:**
+1. For each path referenced in `command:`/`args`, check whether it comes from a Compose `volumes:` mount.
+2. If the path is a **log/data output directory** that only exists via host mount:
+   - **Option A (preferred):** Drop the argument entirely — let the app use its built-in defaults (most apps log to stdout by default).
+   - **Option B:** Add a matching `volumeClaimTemplates` (StatefulSet) or `emptyDir`-equivalent PVC to ensure the path exists.
+3. If the path is an **essential config/script file** mounted from host → convert to ConfigMap mount instead.
+4. Paths to executables or tools already inside the image (e.g., `npm start`, `/app/start.sh` from Dockerfile COPY) are safe to keep.
 
 ## Network Mode Mapping
 

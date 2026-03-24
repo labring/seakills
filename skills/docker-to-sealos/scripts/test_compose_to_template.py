@@ -727,7 +727,7 @@ class ComposeToTemplateTests(unittest.TestCase):
             env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
             redis_host = next(item for item in env if item["name"] == "REDIS_HOST")
             secret_ref = redis_host.get("valueFrom", {}).get("secretKeyRef", {})
-            self.assertEqual("${{ defaults.app_name }}-redis-account-default", secret_ref.get("name"))
+            self.assertEqual("${{ defaults.app_name }}-redis-redis-account-default", secret_ref.get("name"))
             self.assertEqual("host", secret_ref.get("key"))
 
     def test_generates_mysql_cluster_resources_and_secret_env_mapping(self):

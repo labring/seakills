@@ -575,7 +575,7 @@ The following specifications are consistent with the database upgrade documentat
 - Database connection fields (`endpoint`/`host`/`port`/`username`/`password`) in application containers must be obtained via `secretKeyRef`
 - PostgreSQL Cluster uses `postgresql-16.4.0` and includes `kb.io/database`, `disableExporter: true`, `enabledLogs: [running]`
 - Secret naming upgrades:
-  - `xxx-redis-conn-credential` -> `xxx-redis-account-default`
+  - `xxx-redis-conn-credential` -> `xxx-redis-redis-account-default`
   - `xxx-mongo-conn-credential` -> `xxx-mongodb-account-root`
   - `xxx-conn-credential` (kafka) -> `xxx-broker-account-admin`
 
@@ -584,8 +584,18 @@ The following specifications are consistent with the database upgrade documentat
 - PostgreSQL: `${{ defaults.app_name }}-pg-conn-credential`
 - MySQL: `${{ defaults.app_name }}-mysql-conn-credential`
 - MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
-- Redis: `${{ defaults.app_name }}-redis-account-default`
+- Redis: `${{ defaults.app_name }}-redis-redis-account-default`
 - Kafka: `${{ defaults.app_name }}-broker-account-admin`
+
+**Important — Redis naming pattern:**
+The Redis secret and service names contain a "double redis" because Kubeblocks follows the pattern `<cluster>-<component>-account-default` for secrets and `<cluster>-<component>-<component>` for ClusterIP services:
+- Cluster name: `${{ defaults.app_name }}-redis`
+- Component name: `redis` (defined in `componentSpecs[].name`)
+- Secret: `${{ defaults.app_name }}-redis` + `-redis-account-default` = `...-redis-redis-account-default`
+- ClusterIP Service: `${{ defaults.app_name }}-redis` + `-redis` + `-redis` = `...-redis-redis-redis`
+- Service FQDN: `${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc`
+
+This same pattern applies to other databases (e.g., PostgreSQL service is `<app>-pg-postgresql`, MySQL is `<app>-mysql-mysql`).
 
 ### Keys Included in Secrets
 
@@ -670,26 +680,26 @@ env:
   - name: REDIS_ENDPOINT
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: endpoint
   - name: REDIS_HOST
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: host
   - name: REDIS_PORT
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: port
   - name: REDIS_USERNAME
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: username
   - name: REDIS_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: password
 ```

@@ -293,6 +293,21 @@ volumes:
 
 Storage cannot create PersistentVolumeClaim independently; it must use the `volumeClaimTemplates` field within a Deployment or StatefulSet.
 
+### Deployment + volumeClaimTemplates — Sealos Template API Only (Important!)
+
+`volumeClaimTemplates` on a **Deployment** is a **Sealos-specific extension**. It works only when deployed through the Sealos Template API (`POST /api/v2alpha/templates/raw`). Standard Kubernetes `kubectl apply` will reject a Deployment with `volumeClaimTemplates`:
+
+```
+error: Deployment in version "v1" cannot be handled as a Deployment:
+  strict decoding error: unknown field "spec.volumeClaimTemplates"
+```
+
+**When using kubectl apply as a fallback**, you must handle this:
+1. If the resource is `kind: Deployment` with `spec.volumeClaimTemplates` → remove the `volumeClaimTemplates` field and the corresponding `volumeMounts` entries before applying, OR convert to a `StatefulSet`.
+2. If the resource is `kind: StatefulSet` with `spec.volumeClaimTemplates` → this is standard Kubernetes and works fine with kubectl apply.
+
+**Recommendation for template authors:** When persistent storage is needed, prefer `StatefulSet` over `Deployment` to ensure compatibility with both the Template API and kubectl apply.
+
 ### volumeClaimTemplates Format
 
 ```yaml
@@ -690,7 +705,7 @@ env:
 ### Other Databases
 
 Other databases (Redis, MySQL, MongoDB) follow a similar pattern:
-- Redis: `${{ defaults.app_name }}-redis-account-default`
+- Redis: `${{ defaults.app_name }}-redis-redis-account-default`
 - MySQL: `${{ defaults.app_name }}-mysql-conn-credential`
 - MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
 
@@ -772,7 +787,7 @@ env:
   - name: COUCH_DB_URL
     value: http://${{ defaults.app_name }}-svc-couchdb.${{ SEALOS_NAMESPACE }}.svc.cluster.local:5984
   - name: REDIS_URL
-    value: redis://:$(REDIS_PASSWORD)@${{ defaults.app_name }}-redis-redis.${{ SEALOS_NAMESPACE }}.svc:6379
+    value: redis://:$(REDIS_PASSWORD)@${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc:6379
 
 # Incorrect example: Using service name directly
 # - name: WORKER_URL
@@ -791,10 +806,10 @@ env:
   - name: REDIS_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-account-default
+        name: ${{ defaults.app_name }}-redis-redis-account-default
         key: password
   - name: REDIS_URL
-    value: redis://:$(REDIS_PASSWORD)@${{ defaults.app_name }}-redis.${{ SEALOS_NAMESPACE }}.svc:6379
+    value: redis://:$(REDIS_PASSWORD)@${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc:6379
 
   # Incorrect example: If REDIS_URL is defined before REDIS_PASSWORD
   # - name: REDIS_URL
