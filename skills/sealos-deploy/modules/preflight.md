@@ -85,7 +85,7 @@ docker info 2>/dev/null
   - `score-model.mjs` → AI reads files and applies scoring rules directly
   - `detect-image.mjs` → AI runs curl commands for Docker Hub / GHCR API
   - `build-push.mjs` → AI runs `docker buildx` commands directly
-  - `sealos-auth.mjs` → AI runs curl to exchange token for kubeconfig
+  - `sealos-auth.mjs` → AI runs curl to exchange token for kubeconfig (workspace list/switch not available in fallback mode)
 
 **Python:**
 - If missing, Sealos template validation (Phase 5) uses AI self-check instead of `quality_gate.py`
@@ -206,7 +206,7 @@ Record the user's choice as `REGION` for use throughout the rest of this step an
 ```bash
 node "<SKILL_DIR>/scripts/sealos-auth.mjs" check
 ```
-Returns: `{ "authenticated": true/false, "kubeconfig_path": "..." }`
+Returns: `{ "authenticated": true/false, "kubeconfig_path": "...", "workspace": "ns-xxx" }`
 
 **Without Node.js:**
 ```bash
@@ -232,8 +232,9 @@ The script will:
 2. Output a verification URL and user code to stderr
 3. Auto-open the browser for the user
 4. Poll `POST <region>/api/auth/oauth2/token` every 5s until approved
-5. Exchange the access token for kubeconfig
-6. Save to `~/.sealos/kubeconfig` (mode 0600)
+5. Exchange access_token for regional token via `POST <region>/api/auth/regionToken`
+6. Save kubeconfig to `~/.sealos/kubeconfig` (mode 0600)
+7. Save access_token, regional_token, and current_workspace to `~/.sealos/auth.json`
 
 **Important — AI must always show the clickable URL to the user:**
 Even though the script attempts to auto-open the browser, it may fail (e.g., headless environment, SSH session, sandbox restrictions).
@@ -245,7 +246,7 @@ Authorization code: <user_code>
 ```
 This ensures the user can always complete authorization regardless of whether auto-open succeeded.
 
-Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "..." }`
+Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "...", "workspace": "ns-xxx" }`
 
 **Without Node.js (curl fallback):**
 
@@ -311,25 +312,98 @@ while true; do
 done
 ```
 
-Step 4 — Exchange token for kubeconfig (still curl):
+Step 4 — Exchange token for regional token + kubeconfig (still curl):
 ```bash
-KC_RESP=$(curl -ksf -X POST "$REGION/api/auth/getDefaultKubeconfig" \
+REGION_RESP=$(curl -ksf -X POST "$REGION/api/auth/regionToken" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json")
-# Server returns { data: { kubeconfig } }
+# Server returns { data: { token, kubeconfig } }
+REGIONAL_TOKEN=$(echo "$REGION_RESP" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
 # Extract kubeconfig — it's a multi-line YAML value inside JSON
 mkdir -p ~/.sealos
-node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf-8')); process.stdout.write(d.data.kubeconfig)" <<< "$KC_RESP" > ~/.sealos/kubeconfig 2>/dev/null \
-  || python3 -c "import sys,json; print(json.load(sys.stdin)['data']['kubeconfig'])" <<< "$KC_RESP" > ~/.sealos/kubeconfig
+node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf-8')); process.stdout.write(d.data.kubeconfig)" <<< "$REGION_RESP" > ~/.sealos/kubeconfig 2>/dev/null \
+  || python3 -c "import sys,json; print(json.load(sys.stdin)['data']['kubeconfig'])" <<< "$REGION_RESP" > ~/.sealos/kubeconfig
 chmod 600 ~/.sealos/kubeconfig
 ```
-Note: kubeconfig is multi-line YAML embedded in JSON — simple grep won't work. Use node/python one-liner to extract it. Save auth metadata:
+Note: kubeconfig is multi-line YAML embedded in JSON — simple grep won't work. Use node/python one-liner to extract it. Save auth metadata with tokens:
 ```bash
 cat > ~/.sealos/auth.json << EOF
-{"region":"$REGION","authenticated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","auth_method":"oauth2_device_grant"}
+{"region":"$REGION","access_token":"$ACCESS_TOKEN","regional_token":"$REGIONAL_TOKEN","authenticated_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","auth_method":"oauth2_device_grant"}
 EOF
 chmod 600 ~/.sealos/auth.json
 ```
+
+### 3.3 Workspace Selection (every deploy)
+
+After auth is confirmed, **always** let the user choose which workspace to deploy to. The last-used workspace is the default.
+
+**With Node.js:**
+```bash
+node "<SKILL_DIR>/scripts/sealos-auth.mjs" list
+```
+Returns:
+```json
+{
+  "current": "ns-abc",
+  "workspaces": [
+    { "uid": "...", "id": "ns-abc", "teamName": "My Team", "role": 0, "nstype": 1 },
+    { "uid": "...", "id": "ns-def", "teamName": "Dev Team", "role": 0, "nstype": 0 },
+    { "uid": "...", "id": "ns-ghi", "teamName": "Staging", "role": 2, "nstype": 0 }
+  ]
+}
+```
+
+Present the workspace list to the user. **Put the `current` workspace first**, mark it as last used:
+
+```
+Which workspace do you want to deploy to?
+
+  1. ns-abc — My Team ← current
+  2. ns-def — Dev Team
+  3. ns-ghi — Staging
+
+Default: ns-abc (My Team)
+```
+
+Display format is `id — teamName`. The `current` field from the JSON indicates the last-used workspace — always list it first.
+
+- If the user picks the same workspace as `current` → no action needed, kubeconfig is already valid.
+- If the user picks a different workspace → switch:
+
+```bash
+node "<SKILL_DIR>/scripts/sealos-auth.mjs" switch <ns-id>
+```
+
+This updates `~/.sealos/kubeconfig` and records the new workspace as `current_workspace` in `auth.json` for next time.
+
+**Without Node.js (curl fallback):**
+
+List workspaces:
+```bash
+NS_RESP=$(curl -ksf "$REGION/api/auth/namespace/list" \
+  -H "Authorization: $REGIONAL_TOKEN")
+```
+
+Parse and present options to user. If the user picks a different workspace:
+```bash
+SWITCH_RESP=$(curl -ksf -X POST "$REGION/api/auth/namespace/switch" \
+  -H "Authorization: $REGIONAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"ns_uid\":\"$TARGET_UID\"}")
+NEW_TOKEN=$(echo "$SWITCH_RESP" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+# Get new kubeconfig
+KC_RESP=$(curl -ksf "$REGION/api/auth/getKubeconfig" \
+  -H "Authorization: $NEW_TOKEN")
+node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf-8')); process.stdout.write(d.data.kubeconfig)" <<< "$KC_RESP" > ~/.sealos/kubeconfig 2>/dev/null \
+  || python3 -c "import sys,json; print(json.load(sys.stdin)['data']['kubeconfig'])" <<< "$KC_RESP" > ~/.sealos/kubeconfig
+chmod 600 ~/.sealos/kubeconfig
+
+# Update auth.json with new token
+REGIONAL_TOKEN="$NEW_TOKEN"
+```
+
+**If only one workspace exists**, skip the selection prompt and use it directly.
 
 ## Ready
 
@@ -350,6 +424,7 @@ Environment:                      (cached / refreshed)
 
 Auth:
   ✓ Sealos Cloud (<region>)
+  ✓ Workspace: <ns-id> (<teamName>)
 ```
 
 Note: Docker Hub login is NOT checked here. It is only required if Phase 2 finds no existing image and we need to build & push (Phase 4).

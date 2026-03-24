@@ -97,7 +97,7 @@ Located in `scripts/` within this skill directory (`<SKILL_DIR>/scripts/`):
 | `score-model.mjs` | `node score-model.mjs <repo-dir>` | Deterministic readiness scoring (0-12) |
 | `detect-image.mjs` | `node detect-image.mjs <github-url> [work-dir]` or `node detect-image.mjs <work-dir>` | Detect existing Docker/GHCR images |
 | `build-push.mjs` | `node build-push.mjs <work-dir> <user> <repo>` | Build amd64 image & push to Docker Hub |
-| `sealos-auth.mjs` | `node sealos-auth.mjs check\|login` | Sealos Cloud authentication |
+| `sealos-auth.mjs` | `node sealos-auth.mjs check\|login\|list\|switch` | Sealos Cloud authentication & workspace switching |
 
 All scripts output JSON. Run via Bash and parse the result.
 

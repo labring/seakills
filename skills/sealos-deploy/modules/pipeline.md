@@ -736,7 +736,7 @@ All error responses use a unified format:
 | 201 | Deployed successfully | Extract instance name and resources from response |
 | 200 | Dry-run preview (`dryRun: true`) | Show resource preview and quota |
 | 400 | Validation error — `INVALID_PARAMETER` (missing yaml/name) or `INVALID_VALUE` (bad YAML, missing required args) | Read `error.message`, fix template or provide missing `args`, retry |
-| 401 | `AUTHENTICATION_REQUIRED` — missing or invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login` |
+| 401 | `AUTHENTICATION_REQUIRED` — missing or invalid kubeconfig | Re-run auth: `node sealos-auth.mjs login`, or switch workspace: `node sealos-auth.mjs switch <ns>` |
 | 403 | `FORBIDDEN` — insufficient permissions | Inform user, check kubeconfig namespace permissions |
 | 409 | `ALREADY_EXISTS` — instance already exists | Inform user, suggest different app name |
 | 422 | `RESOURCE_ERROR` — K8s rejected resource spec | Read `error.details` for K8s rejection reason, fix template |
