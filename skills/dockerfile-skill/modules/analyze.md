@@ -6,6 +6,27 @@ Analyze a project to extract all information needed for Dockerfile generation.
 
 ## Execution Steps
 
+### Pre-loaded Context (Optional)
+
+When invoked from the `sealos-deploy` pipeline, Phase 1 analysis results may already
+be available (loaded from `.sealos/analysis.json`).
+
+**If analysis.json data is available**, skip overlapping steps and use pre-loaded values:
+
+| Skip Step | Use pre-loaded value |
+|-----------|---------------------|
+| Step 1 (language/framework) | `language`, `framework` |
+| Step 2 (package manager) | `package_manager` |
+| Step 4 (port) | `port` |
+| Step 5 (databases) | `databases` — only skip DB type detection; still detect S3, search engines, message queues |
+| Step 7 (Docker config) | `has_dockerfile` — still check docker-compose.yml and .dockerignore |
+| Step 8 (monorepo) | `complexity_tier` — if L1/L2, skip; if L3, still enumerate workspace packages |
+
+**Always run** (Dockerfile-specific, not in analysis.json):
+Steps 3, 6, 9, 10, 11, 12, 13, 14, 15, 16, 17
+
+**If no pre-loaded data** (standalone `/dockerfile`): run all 17 steps as normal.
+
 ### Step 1: Detect Language and Framework
 
 Check for these files in order:

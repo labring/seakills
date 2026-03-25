@@ -192,6 +192,10 @@ Score 6 dimensions (0-2 each, max 12). For detailed criteria, read:
 
 ### 1.3 AI Quick Assessment
 
+Use `signals.language` and `signals.framework` from the Phase 1.2 score-model output
+to shortcut language/framework identification. Focus AI effort on: port, env_vars,
+package_manager, and complexity_tier (not detected by score-model).
+
 Based on the score result and your own analysis of the project, assess:
 
 1. Read key files: `README.md`, `package.json`/`go.mod`/`requirements.txt`, `Dockerfile` (if exists)
@@ -345,6 +349,12 @@ Read the template matching the detected language/framework, then adapt it:
 - Adjust build commands based on actual package manager (npm/yarn/pnpm/bun)
 - Add system dependencies if needed
 - Set correct entry point
+
+**Pre-load Phase 1 analysis for analyze.md:**
+
+Read `.sealos/analysis.json` before running analyze.md. The following fields are available
+as pre-loaded context, so analyze.md can skip its overlapping detection steps:
+`language`, `framework`, `package_manager`, `port`, `databases`, `has_dockerfile`, `complexity_tier`.
 
 **For detailed analysis guidance, read:**
 ```
