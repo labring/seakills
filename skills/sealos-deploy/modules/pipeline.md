@@ -126,7 +126,7 @@ Present the detected state and let the user choose:
 ```
 Detected existing deployment:
   App:   <app_name>
-  Image: <current_image>
+  Image: <image>
   URL:   <url>
 
   1. Update this deployment (rebuild & push new image)

@@ -58,7 +58,7 @@ UPDATE: Build & Push → kubectl set image → Verify rollout (auto-rollback on 
 ```
 Mode Detection reads `.sealos/state.json` `last_deploy` field. If a running deployment is found (verified via kubectl), the skill enters UPDATE mode and skips assess/template/deploy phases. If not, it runs the full DEPLOY pipeline.
 
-State is tracked in `.sealos/state.json` (deployment state), `.sealos/analysis.json` (project analysis snapshot), and `.sealos/config.json` (optional user overrides). The `last_deploy` section in `state.json` (written after first deploy) records app_name, namespace, current_image, and URL — enabling future updates without re-deploying from scratch.
+State is tracked in `.sealos/state.json` (deployment state), `.sealos/analysis.json` (project analysis snapshot), and `.sealos/config.json` (optional user overrides). The `last_deploy` section in `state.json` (written after first deploy) records app_name, namespace, image, and URL — enabling future updates without re-deploying from scratch.
 
 ### Installer (`install.sh`)
 Downloads skills from site distribution (with GitHub fallback), installs to `~/.agents/skills/` (canonical), then symlinks to each detected agent's skills directory.
