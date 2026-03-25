@@ -878,6 +878,8 @@ On success, present to user:
 ✓ Deployed to Sealos Cloud ({region})
 
 App URL: https://<app-access-url>
+
+To update this deployment later, run: /sealos-deploy
 ```
 
 If any `inputs` were configured, also show:
@@ -1025,6 +1027,8 @@ Present to user:
 ✓ Rollout: complete
 
 App URL: <APP_URL>
+
+To update again later, run: /sealos-deploy
 ```
 
 ### On failure:
