@@ -1,5 +1,6 @@
 # Skill workspace (local eval runs, cloned repos)
 skills/sealos-deploy-workspace/
 
-# Deployment state output
-deploy-out/
+# Deployment artifacts (auto-generated, not committed)
+.sealos/analysis.json
+.sealos/build/

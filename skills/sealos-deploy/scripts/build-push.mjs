@@ -41,7 +41,7 @@ function buildAndPush (workDir, dockerHubUser, repoName) {
     )
 
     // Write build-result.json
-    const buildDir = path.join(workDir, 'deploy-out', 'docker-build')
+    const buildDir = path.join(workDir, '.sealos', 'build')
     fs.mkdirSync(buildDir, { recursive: true })
     fs.writeFileSync(
       path.join(buildDir, 'build-result.json'),
