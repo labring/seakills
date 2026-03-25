@@ -11,6 +11,19 @@ allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 
 Deploy any GitHub project to Sealos Cloud — from source code to running application, one command.
 
+## kubectl Safety Rules (all phases)
+
+All kubectl commands MUST use the Sealos kubeconfig:
+```
+KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify
+```
+
+**`kubectl delete` requires user confirmation.** Before deleting any resource (deployment, service, ingress, PVC, database, etc.), always ask:
+```
+⚠️ 即将删除 <resource kind>/<resource name>，数据不可恢复。确认？(y/n)
+```
+Only proceed after user confirms. This applies even if the pipeline logic suggests deletion — always ask first.
+
 ## Usage
 
 ```

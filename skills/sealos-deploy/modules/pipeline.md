@@ -904,27 +904,7 @@ All kubectl commands use the Sealos kubeconfig:
 KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify
 ```
 
-### kubectl Safety Rules (MUST follow)
-
-The Sealos kubeconfig has **real cluster permissions**. Destructive operations can permanently lose user data and running services.
-
-**Allowed operations — read and in-place update only:**
-- `kubectl get` — read resources
-- `kubectl set image` — update container image
-- `kubectl patch` — update specific fields
-- `kubectl rollout status` — watch rollout progress
-- `kubectl rollout undo` — revert to previous revision (only on failed rollout)
-- `kubectl rollout restart` — restart pods with same config
-- `kubectl logs` — read pod logs for debugging
-
-**NEVER run these — no exceptions:**
-- `kubectl delete` — never delete deployments, services, ingresses, PVCs, databases, or any resource
-- `kubectl replace` — can overwrite resources and lose fields
-- `kubectl scale ... --replicas=0` — equivalent to taking the app offline
-- `kubectl edit` — opens interactive editor, not suitable for automation
-- `kubectl apply` with incomplete YAML — can remove fields that were previously set
-
-If a situation seems to require deleting or replacing a resource, **stop and ask the user** rather than proceeding.
+**Reminder:** `kubectl delete` requires user confirmation — see SKILL.md "kubectl Safety Rules".
 
 ## Context from Mode Detection
 
