@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 REPO="zjy365/seakills"
 SITE_URL="https://seakills.gzg.sealos.run"
 
@@ -73,6 +73,61 @@ if [ -f "$VERSION_FILE" ]; then
 else
   echo "Installing Seakills v${VERSION}..."
 fi
+echo ""
+
+# --- Install kubectl if missing ---
+AGENTS_BIN="$HOME/.agents/bin"
+
+install_kubectl() {
+  if command -v kubectl &>/dev/null; then
+    echo "kubectl: $(kubectl version --client --short 2>/dev/null || kubectl version --client 2>/dev/null | head -1) (already installed)"
+    return 0
+  fi
+
+  echo "Installing kubectl..."
+
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) echo "  ✗ Unsupported architecture: $arch"; return 1 ;;
+  esac
+
+  # Get latest stable version
+  local kube_version
+  kube_version="$(curl -fsSL --connect-timeout 10 https://dl.k8s.io/release/stable.txt 2>/dev/null)" || kube_version="v1.32.0"
+
+  mkdir -p "$AGENTS_BIN"
+  local url="https://dl.k8s.io/release/${kube_version}/bin/${os}/${arch}/kubectl"
+
+  if curl -fsSL --connect-timeout 15 "$url" -o "$AGENTS_BIN/kubectl" 2>/dev/null; then
+    chmod +x "$AGENTS_BIN/kubectl"
+    echo "  ✓ kubectl ${kube_version} → $AGENTS_BIN/kubectl"
+  else
+    echo "  ✗ kubectl download failed (deploy will still work, but updates require full re-deploy)"
+    return 1
+  fi
+
+  # Silently add ~/.agents/bin to PATH in shell profiles (idempotent)
+  local path_line="export PATH=\"\$HOME/.agents/bin:\$PATH\""
+  local fish_line="fish_add_path -g \$HOME/.agents/bin"
+
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+    if [ -f "$rc" ]; then
+      grep -qF '.agents/bin' "$rc" 2>/dev/null || echo "$path_line" >> "$rc"
+    fi
+  done
+
+  # Fish config
+  local fish_conf="$HOME/.config/fish/config.fish"
+  if [ -f "$fish_conf" ]; then
+    grep -qF '.agents/bin' "$fish_conf" 2>/dev/null || echo "$fish_line" >> "$fish_conf"
+  fi
+}
+
+install_kubectl || true
 echo ""
 
 # --- Download skills ---

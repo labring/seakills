@@ -27,8 +27,9 @@ git --version 2>/dev/null
 node --version 2>/dev/null
 python3 --version 2>/dev/null
 
-# Optional (enables in-place updates of deployed apps)
-kubectl version --client 2>/dev/null
+# Required (enables in-place updates of deployed apps)
+# Check PATH first, then fallback to ~/.agents/bin/
+kubectl version --client 2>/dev/null || ~/.agents/bin/kubectl version --client 2>/dev/null
 
 # Always available (system built-in)
 curl --version 2>/dev/null | head -1
@@ -57,7 +58,7 @@ ENV.docker    = true/false
 ENV.git       = true/false
 ENV.node      = true/false   (18+ required)
 ENV.python    = true/false
-ENV.kubectl   = true/false
+ENV.kubectl   = true/false   (if false, check ~/.agents/bin/kubectl)
 ENV.curl      = true/false
 ENV.jq        = true/false
 ```
@@ -90,9 +91,11 @@ docker info 2>/dev/null
 **Python:**
 - If missing, Sealos template validation (Phase 5) uses AI self-check instead of `quality_gate.py`
 
-**kubectl:**
-- If available, enables in-place update of already-deployed apps (`kubectl set image`, `kubectl rollout`)
-- If missing, updates require a full re-deploy through the Template API
+**kubectl (required):**
+- Installed automatically by `install.sh` to `~/.agents/bin/kubectl`
+- If `kubectl` is not in PATH, use `~/.agents/bin/kubectl` as the absolute path for all kubectl commands
+- Enables in-place update of already-deployed apps (`kubectl set image`, `kubectl rollout`)
+- If somehow missing, guide user to re-run the installer: `curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash`
 
 ## Step 2: Project Context
 
@@ -420,7 +423,7 @@ Environment:                      (cached / refreshed)
   ✓ git <version>
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)
   ○ Python <version>          (or: ✗ Python — template validation via AI)
-  ○ kubectl <version>         (or: ✗ kubectl — update via re-deploy only)
+  ✓ kubectl <version>
 
 Auth:
   ✓ Sealos Cloud (<region>)
