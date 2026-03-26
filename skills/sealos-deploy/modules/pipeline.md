@@ -192,9 +192,16 @@ Score 6 dimensions (0-2 each, max 12). For detailed criteria, read:
 
 ### 1.3 AI Quick Assessment
 
-Use `signals.language` and `signals.framework` from the Phase 1.2 score-model output
-to shortcut language/framework identification. Focus AI effort on: port, env_vars,
-package_manager, and complexity_tier (not detected by score-model).
+Use structured signals from Phase 1.2 score-model output directly:
+- `signals.primary_language` — primary language (priority-sorted when multiple detected)
+- `signals.framework` — detected frameworks
+- `signals.package_manager` — detected package manager (npm/yarn/pnpm/bun/pip/go/etc.)
+- `signals.port` — detected port (from framework defaults)
+- `signals.databases` — detected database types (postgres/mysql/mongodb/redis/sqlite)
+- `signals.is_monorepo`, `signals.has_docker`, `signals.has_env_example`
+
+Focus AI effort on what the script cannot detect: env_vars classification,
+complexity_tier assessment, and port override from source code (if `port_source` is "unknown").
 
 Based on the score result and your own analysis of the project, assess:
 
@@ -240,7 +247,8 @@ After Phase 1 completes, write `.sealos/analysis.json` with the full analysis sn
     "branch": "<BRANCH or null>"
   },
   "score": { "total": "<N>", "verdict": "<verdict>", "dimensions": {} },
-  "language": "<detected language>",
+  "language": "<signals.primary_language>",
+  "all_languages": ["<all detected languages from signals.language>"],
   "framework": "<detected framework>",
   "package_manager": "<npm|yarn|pnpm|bun|pip|go|cargo|maven|gradle>",
   "port": "<primary port>",

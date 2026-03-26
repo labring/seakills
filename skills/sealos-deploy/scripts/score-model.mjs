@@ -17,6 +17,30 @@
 import fs from 'fs';
 import path from 'path';
 
+// ─── Language Priority ───────────────────────────────────────
+
+const LANGUAGE_PRIORITY = ['go', 'rust', 'java', 'node', 'python', 'php', 'ruby', 'dotnet'];
+
+function pickPrimaryLanguage(langSignals, fwSignals) {
+  const detected = Object.entries(langSignals).filter(([, v]) => v).map(([k]) => k);
+  if (detected.length <= 1) return detected[0] || null;
+
+  // Prefer languages with a detected web framework
+  const withFramework = detected.filter(lang => {
+    if (lang === 'node') return fwSignals.nextjs || fwSignals.nuxt || fwSignals.express || fwSignals.hono || fwSignals.fastify || fwSignals.nestjs;
+    if (lang === 'python') return fwSignals.fastapi || fwSignals.django || fwSignals.flask;
+    if (lang === 'go') return fwSignals.gin || fwSignals.echo || fwSignals.fiber;
+    if (lang === 'java') return fwSignals.spring;
+    return false;
+  });
+
+  if (withFramework.length === 1) return withFramework[0];
+
+  // Multiple with frameworks or none → sort by priority (compiled > interpreted)
+  const pool = withFramework.length > 0 ? withFramework : detected;
+  return pool.sort((a, b) => LANGUAGE_PRIORITY.indexOf(a) - LANGUAGE_PRIORITY.indexOf(b))[0];
+}
+
 // ─── Signal Detection ───────────────────────────────────────
 
 function detectSignals(repoDir) {
@@ -228,7 +252,52 @@ function detectSignals(repoDir) {
     }
   }
 
-  return { lang, fw, http, state, config, docker, mono, lifecycle };
+  // ── Package Manager Detection ──
+  const pm = {};
+  if (lang.node) {
+    if (has('pnpm-lock.yaml')) pm.name = 'pnpm';
+    else if (has('yarn.lock')) pm.name = 'yarn';
+    else if (has('bun.lockb') || has('bun.lock')) pm.name = 'bun';
+    else pm.name = 'npm';
+  } else if (lang.python) {
+    pm.name = has('Pipfile') ? 'pipenv' : 'pip';
+  } else if (lang.go) {
+    pm.name = 'go';
+  } else if (lang.java) {
+    pm.name = has('gradlew') || has('build.gradle') || has('build.gradle.kts') ? 'gradle' : 'maven';
+  } else if (lang.rust) {
+    pm.name = 'cargo';
+  } else if (lang.php) {
+    pm.name = 'composer';
+  } else if (lang.ruby) {
+    pm.name = 'bundler';
+  }
+
+  // ── Port Detection (concrete value) ──
+  const port = {};
+  if (lang.node) {
+    if (fw.nextjs || fw.nuxt) port.value = 3000;
+    else if (fw.nestjs) port.value = 3000;
+    else if (fw.astro) port.value = 4321;
+  }
+  if (lang.go && !port.value) port.value = 8080;
+  if (lang.python && (fw.fastapi || fw.flask) && !port.value) port.value = 8000;
+  if (lang.python && fw.django && !port.value) port.value = 8000;
+  if (lang.java && fw.spring && !port.value) port.value = 8080;
+  if (lang.rust && !port.value) port.value = 8080;
+  if (lang.php && !port.value) port.value = 80;
+  if (lang.ruby && !port.value) port.value = 3000;
+  port.source = port.value ? 'framework-default' : 'unknown';
+
+  // ── Database Types (concrete list) ──
+  const databases = [];
+  if (state.uses_postgres) databases.push('postgres');
+  if (state.uses_mysql) databases.push('mysql');
+  if (state.uses_mongodb) databases.push('mongodb');
+  if (state.uses_redis) databases.push('redis');
+  if (state.uses_sqlite) databases.push('sqlite');
+
+  return { lang, fw, http, state, config, docker, mono, lifecycle, pm, port, databases };
 }
 
 // ─── Scoring Algorithm ──────────────────────────────────────
@@ -372,6 +441,7 @@ function scoreProject(repoDir) {
     bonus_reasons: bonusReasons,
     signals: {
       language: Object.entries(s.lang).filter(([, v]) => v).map(([k]) => k),
+      primary_language: pickPrimaryLanguage(s.lang, s.fw),
       framework: Object.entries(s.fw).filter(([, v]) => v).map(([k]) => k),
       has_http_server: s.http.has_http_handler,
       external_db: s.state.uses_external_db,
@@ -379,6 +449,10 @@ function scoreProject(repoDir) {
       is_monorepo: s.mono.is_monorepo,
       has_env_example: s.config.has_env_example,
       dockerfile_paths: s.docker._dockerfile_paths || [],
+      package_manager: s.pm.name || null,
+      port: s.port.value || null,
+      port_source: s.port.source,
+      databases: s.databases,
     },
   };
 }
