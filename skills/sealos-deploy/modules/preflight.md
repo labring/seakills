@@ -27,6 +27,9 @@ git --version 2>/dev/null
 node --version 2>/dev/null
 python3 --version 2>/dev/null
 
+# Optional (enables GHCR push — preferred over Docker Hub)
+gh --version 2>/dev/null
+
 # Required (enables in-place updates of deployed apps)
 # Check PATH first, then fallback to ~/.agents/bin/
 kubectl version --client 2>/dev/null || ~/.agents/bin/kubectl version --client 2>/dev/null
@@ -44,6 +47,7 @@ Save results to `~/.sealos/env.json`:
   "node": "20.4.0",
   "python": "3.9.6",
   "kubectl": "1.31.0",
+  "gh": "2.65.0",
   "curl": true,
   "jq": true,
   "cached_at": "2026-03-05T14:30:00Z"
@@ -59,6 +63,7 @@ ENV.git       = true/false
 ENV.node      = true/false   (18+ required)
 ENV.python    = true/false
 ENV.kubectl   = true/false   (if false, check ~/.agents/bin/kubectl)
+ENV.gh        = true/false   (enables GHCR push — preferred over Docker Hub)
 ENV.curl      = true/false
 ENV.jq        = true/false
 ```
@@ -80,6 +85,11 @@ docker info 2>/dev/null
 - `brew install git` (macOS) or `sudo apt install git` (Linux)
 
 ### Optional tools — scripts run faster, but AI can do the same work
+
+**gh CLI (GitHub CLI):**
+- If present and authenticated → enables **zero-interaction GHCR push** (preferred over Docker Hub)
+- `build-push.mjs` auto-detects `gh auth status` and uses `gh auth token` to login to `ghcr.io`
+- If missing → falls back to Docker Hub login (manual `docker login` required)
 
 **Node.js:**
 - If missing, no problem. Pipeline uses fallback mode:
@@ -424,12 +434,13 @@ Environment:                      (cached / refreshed)
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)
   ○ Python <version>          (or: ✗ Python — template validation via AI)
   ✓ kubectl <version>
+  ○ gh <version>              (or: ✗ gh CLI — will use Docker Hub for push)
 
 Auth:
   ✓ Sealos Cloud (<region>)
   ✓ Workspace: <ns-id> (<teamName>)
 ```
 
-Note: Docker Hub login is NOT checked here. It is only required if Phase 2 finds no existing image and we need to build & push (Phase 4).
+Note: Container registry login is NOT checked here. It is only required if Phase 2 finds no existing image and we need to build & push (Phase 4). If `gh` CLI is authenticated, GHCR login happens automatically — no user interaction needed.
 
 Record `ENV` and `PROJECT` for subsequent phases → proceed to `modules/pipeline.md`.

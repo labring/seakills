@@ -404,36 +404,77 @@ __pycache__
 
 ## Phase 4: Build & Push
 
-### 4.0 Docker Hub Login (lazy — only checked here)
+### 4.0 Registry Auth (auto-select — lazy, only checked here)
 
-Docker Hub login is deferred to this phase because it's only needed when building.
+Registry login is deferred to this phase because it's only needed when building.
 If Phase 2 found an existing image, this phase is skipped entirely.
 
+**Priority order (fully automatic when gh CLI is present):**
+
+**1. GHCR via gh CLI (preferred — zero user interaction):**
+```bash
+gh auth status 2>/dev/null
+```
+If authenticated:
+```bash
+GH_USER=$(gh api user -q .login)
+gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
+REGISTRY=ghcr
+```
+This is completely transparent to the user — no prompts, no account creation, no manual login.
+
+**2. Docker Hub (fallback — already logged in):**
 ```bash
 docker info 2>/dev/null | grep "Username:"
 ```
+If a Docker Hub session exists, use it:
+```bash
+DOCKER_HUB_USER=<extracted username>
+REGISTRY=dockerhub
+```
 
-If not logged in:
-1. Ask user for Docker Hub username
-2. Guide user to run in their terminal: `docker login -u <username>`
-3. Record `DOCKER_HUB_USER`
+**3. Nothing available — guide user:**
+Recommend gh CLI (easiest path):
+```
+No container registry available.
 
-If user doesn't have a Docker Hub account → guide to https://hub.docker.com/signup
+Recommended: install GitHub CLI for zero-config image push:
+  brew install gh && gh auth login    # macOS
+  sudo apt install gh && gh auth login # Linux
+
+Alternative: log in to Docker Hub manually:
+  docker login
+```
 
 ### 4.1 Build & Push
 
-Tag format: `<DOCKER_HUB_USER>/<repo-name>:YYYYMMDD-HHMMSS` (e.g., `zhujingyang/kite:20260304-143022`). The timestamp ensures same-day rebuilds never collide.
+Tag format: `<owner-or-user>/<repo-name>:YYYYMMDD-HHMMSS` (e.g., `ghcr.io/zhujingyang/kite:20260304-143022`). The timestamp ensures same-day rebuilds never collide.
 
 **If Node.js available:**
 ```bash
-node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<DOCKER_HUB_USER>" "<repo-name>"
+node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>"
 ```
-Output: `{ "success": true, "image": "..." }` or `{ "success": false, "error": "..." }`
+The script auto-detects the registry (GHCR > Docker Hub). To force a specific registry:
+```bash
+node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry ghcr
+node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry dockerhub --user "<user>"
+```
+Output: `{ "success": true, "image": "...", "registry": "ghcr" }` or `{ "success": false, "error": "..." }`
 
 **If Node.js not available (fallback — run docker directly):**
 ```bash
 TAG=$(date +%Y%m%d-%H%M%S)
-IMAGE="<DOCKER_HUB_USER>/<repo-name>:$TAG"
+
+# GHCR path (if gh CLI available)
+if gh auth status 2>/dev/null; then
+  GH_USER=$(gh api user -q .login)
+  gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
+  IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"
+else
+  # Docker Hub fallback
+  IMAGE="<DOCKER_HUB_USER>/<repo-name>:$TAG"
+fi
+
 docker buildx build --platform linux/amd64 -t "$IMAGE" --push -f Dockerfile "$WORK_DIR"
 ```
 

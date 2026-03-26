@@ -1,7 +1,7 @@
 ---
 name: sealos-deploy
 description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated. Use when user says "deploy to sealos", "deploy this project", "deploy to cloud", "deploy this repo", mentions Sealos deployment, wants to deploy a GitHub URL or local project to a cloud platform, or asks about one-click deployment. Also triggers on "/sealos-deploy".
-compatibility: Requires Docker, git. Optional Node.js 18+, Python 3.8+.
+compatibility: Requires Docker, git. Optional Node.js 18+, Python 3.8+, gh CLI (enables zero-interaction GHCR push).
 metadata:
   author: zjy365
 allowed-tools: Read Glob Grep Bash Write Edit WebFetch
@@ -75,9 +75,9 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy started" > "$LOG_FILE"
 [2026-03-05 14:30:07] Generated: python-fastapi template, port 8000
 
 [2026-03-05 14:30:08] === Phase 4: Build & Push ===
-[2026-03-05 14:30:08] Docker Hub user: zhujingyang
-[2026-03-05 14:30:30] Build: ✓ zhujingyang/repo:20260305
-[2026-03-05 14:30:30] IMAGE_REF=zhujingyang/repo:20260305
+[2026-03-05 14:30:08] Registry: ghcr (auto-detected via gh CLI)
+[2026-03-05 14:30:30] Build: ✓ ghcr.io/zhujingyang/repo:20260305-143022
+[2026-03-05 14:30:30] IMAGE_REF=ghcr.io/zhujingyang/repo:20260305-143022
 
 [2026-03-05 14:30:31] === Phase 5: Template ===
 [2026-03-05 14:30:32] Output: .sealos/template/index.yaml
@@ -109,7 +109,7 @@ Located in `scripts/` within this skill directory (`<SKILL_DIR>/scripts/`):
 |--------|-------|---------|
 | `score-model.mjs` | `node score-model.mjs <repo-dir>` | Deterministic readiness scoring (0-12) |
 | `detect-image.mjs` | `node detect-image.mjs <github-url> [work-dir]` or `node detect-image.mjs <work-dir>` | Detect existing Docker/GHCR images |
-| `build-push.mjs` | `node build-push.mjs <work-dir> <user> <repo>` | Build amd64 image & push to Docker Hub |
+| `build-push.mjs` | `node build-push.mjs <work-dir> <repo> [--registry ghcr\|dockerhub] [--user <user>]` | Build amd64 image & push (GHCR preferred, Docker Hub fallback) |
 | `sealos-auth.mjs` | `node sealos-auth.mjs check\|login\|list\|switch` | Sealos Cloud authentication & workspace switching |
 
 All scripts output JSON. Run via Bash and parse the result.
@@ -139,11 +139,11 @@ Paths used in pipeline.md follow the pattern:
 
 | Phase | Action | Skip When |
 |-------|--------|-----------|
-| 0 — Preflight | Docker + Sealos auth (Docker Hub deferred to Phase 4) | All checks pass |
+| 0 — Preflight | Docker + Sealos auth (registry auth deferred to Phase 4) | All checks pass |
 | 1 — Assess | Clone repo (or use current project), analyze deployability | Score too low → stop |
 | 2 — Detect | Find existing image (Docker Hub / GHCR / README) | Found → jump to Phase 5 |
 | 3 — Dockerfile | Generate Dockerfile if missing | Already has one → skip |
-| 4 — Build & Push | `docker buildx` → Docker Hub | — |
+| 4 — Build & Push | `docker buildx` → GHCR (auto via gh CLI) or Docker Hub (fallback) | — |
 | 5 — Template | Generate Sealos application template | — |
 | 5.5 — Configure | Guide user through app env vars and inputs | No inputs needed |
 | 6 — Deploy | Deploy template to Sealos Cloud | — |
