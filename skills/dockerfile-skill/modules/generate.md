@@ -190,6 +190,20 @@ ENV NOTION_SECRET=${NOTION_SECRET}
 
 #### Database Migration Handling
 
+**Entrypoint Templates**: When generating `docker-entrypoint.sh`, use the matching template from
+`<SKILL_DIR>/templates/assets/` as the starting point instead of writing from scratch:
+
+| ORM detected | Template |
+|-------------|----------|
+| Drizzle | `docker-entrypoint-drizzle.sh` |
+| Prisma | `docker-entrypoint-prisma.sh` |
+| TypeORM | `docker-entrypoint-typeorm.sh` |
+| None (no migrations) | `docker-entrypoint-plain.sh` |
+
+Replace `{{MIGRATION_DIR}}`, `{{ENTRY_FILE}}`, and `{{DATASOURCE_PATH}}` with actual project values.
+You may add project-specific steps (e.g., seed data, cache warmup), but preserve the template's
+`set -e`, echo markers, and `exec` for proper signal handling.
+
 **Critical Pattern**: Next.js Standalone + ORM Dependencies
 
 **Problem**: Next.js standalone output doesn't include all `node_modules`. If your app uses an ORM (Drizzle, Prisma, TypeORM), the ORM packages won't be available for migrations.
@@ -912,6 +926,13 @@ Before proceeding to build phase, verify:
 - [ ] EXPOSE matches detected port
 - [ ] CMD/ENTRYPOINT is correct
 - [ ] .dockerignore excludes sensitive files
+
+**Programmatic validation** (if Node.js available):
+```bash
+node "<SKILL_DIR>/scripts/validate-dockerfile.mjs" "$WORK_DIR/Dockerfile" --port=<port> --json
+```
+This checks: no `:latest` tags, non-root USER, multi-stage build, COPY order, port match, no -dev packages in runtime, CMD exists, .dockerignore exists.
+Fix any reported errors before proceeding to build.
 
 ## Artifact Output
 

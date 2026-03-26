@@ -198,6 +198,7 @@ Use structured signals from Phase 1.2 score-model output directly:
 - `signals.package_manager` — detected package manager (npm/yarn/pnpm/bun/pip/go/etc.)
 - `signals.port` — detected port (from framework defaults)
 - `signals.databases` — detected database types (postgres/mysql/mongodb/redis/sqlite)
+- `signals.runtime_version` — runtime version with source (e.g., `{ node: "22", source: "engines" }`)
 - `signals.is_monorepo`, `signals.has_docker`, `signals.has_env_example`
 
 Focus AI effort on what the script cannot detect: env_vars classification,
@@ -253,6 +254,7 @@ After Phase 1 completes, write `.sealos/analysis.json` with the full analysis sn
   "package_manager": "<npm|yarn|pnpm|bun|pip|go|cargo|maven|gradle>",
   "port": "<primary port>",
   "databases": ["<detected database types>"],
+  "runtime_version": { "<language>": "<major version>", "source": "<detection source>" },
   "env_vars": {},
   "has_dockerfile": false,
   "complexity_tier": "<L1|L2|L3>",
@@ -369,6 +371,15 @@ as pre-loaded context, so analyze.md can skip its overlapping detection steps:
 <SKILL_DIR>/../dockerfile-skill/modules/analyze.md    — 17-step analysis process
 <SKILL_DIR>/../dockerfile-skill/modules/generate.md   — generation rules and best practices
 ```
+
+**Validate generated Dockerfile:**
+
+After generating the Dockerfile, run validation if Node.js is available:
+```bash
+node "<SKILL_DIR>/../dockerfile-skill/scripts/validate-dockerfile.mjs" "$WORK_DIR/Dockerfile" --port=<detected_port> --json
+```
+If validation reports errors, fix the Dockerfile before proceeding to Phase 4.
+If Node.js is not available, manually verify the Validation Checklist in generate.md.
 
 **Key Dockerfile principles:**
 - Multi-stage build (builder + runtime)

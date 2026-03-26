@@ -297,7 +297,79 @@ function detectSignals(repoDir) {
   if (state.uses_redis) databases.push('redis');
   if (state.uses_sqlite) databases.push('sqlite');
 
-  return { lang, fw, http, state, config, docker, mono, lifecycle, pm, port, databases };
+  // ── Runtime Version Detection ──
+  const runtime_version = {};
+  if (lang.node) {
+    const pkg = readJson('package.json');
+    const engines = pkg?.engines?.node;
+    if (engines) {
+      const match = engines.match(/(\d+)/);
+      runtime_version.node = match ? match[1] : '22';
+      runtime_version.source = 'engines';
+    } else {
+      const versionFiles = ['.node-version', '.nvmrc'];
+      for (const f of versionFiles) {
+        if (has(f)) {
+          try {
+            const raw = fs.readFileSync(path.join(repoDir, f), 'utf-8').trim();
+            const m = raw.match(/(\d+)/);
+            if (m) { runtime_version.node = m[1]; runtime_version.source = f; break; }
+          } catch { /* skip */ }
+        }
+      }
+      if (!runtime_version.node) {
+        if (has('.tool-versions')) {
+          try {
+            const content = fs.readFileSync(path.join(repoDir, '.tool-versions'), 'utf-8');
+            const m = content.match(/nodejs?\s+(\d+)/);
+            if (m) { runtime_version.node = m[1]; runtime_version.source = '.tool-versions'; }
+          } catch { /* skip */ }
+        }
+      }
+      if (!runtime_version.node) { runtime_version.node = '22'; runtime_version.source = 'default'; }
+    }
+  } else if (lang.python) {
+    if (has('.python-version')) {
+      try {
+        const raw = fs.readFileSync(path.join(repoDir, '.python-version'), 'utf-8').trim();
+        const m = raw.match(/(\d+\.\d+)/);
+        if (m) { runtime_version.python = m[1]; runtime_version.source = '.python-version'; }
+      } catch { /* skip */ }
+    }
+    if (!runtime_version.python) {
+      const pyproject = has('pyproject.toml') ?
+        fs.readFileSync(path.join(repoDir, 'pyproject.toml'), 'utf-8') : '';
+      const m = pyproject.match(/requires-python\s*=\s*"[><=]*(\d+\.\d+)/);
+      if (m) { runtime_version.python = m[1]; runtime_version.source = 'pyproject.toml'; }
+    }
+    if (!runtime_version.python) { runtime_version.python = '3.12'; runtime_version.source = 'default'; }
+  } else if (lang.go) {
+    if (has('go.mod')) {
+      try {
+        const content = fs.readFileSync(path.join(repoDir, 'go.mod'), 'utf-8');
+        const m = content.match(/^go\s+(\d+\.\d+)/m);
+        if (m) { runtime_version.go = m[1]; runtime_version.source = 'go.mod'; }
+      } catch { /* skip */ }
+    }
+    if (!runtime_version.go) { runtime_version.go = '1.23'; runtime_version.source = 'default'; }
+  } else if (lang.java) {
+    runtime_version.java = '21'; runtime_version.source = 'default';
+    if (has('pom.xml')) {
+      try {
+        const pom = fs.readFileSync(path.join(repoDir, 'pom.xml'), 'utf-8');
+        const m = pom.match(/<java\.version>(\d+)</) || pom.match(/<maven\.compiler\.source>(\d+)</);
+        if (m) { runtime_version.java = m[1]; runtime_version.source = 'pom.xml'; }
+      } catch { /* skip */ }
+    }
+  } else if (lang.rust) {
+    if (has('rust-toolchain.toml') || has('rust-toolchain')) {
+      runtime_version.rust = 'stable'; runtime_version.source = 'rust-toolchain';
+    } else {
+      runtime_version.rust = 'stable'; runtime_version.source = 'default';
+    }
+  }
+
+  return { lang, fw, http, state, config, docker, mono, lifecycle, pm, port, databases, runtime_version };
 }
 
 // ─── Scoring Algorithm ──────────────────────────────────────
@@ -453,6 +525,7 @@ function scoreProject(repoDir) {
       port: s.port.value || null,
       port_source: s.port.source,
       databases: s.databases,
+      runtime_version: s.runtime_version,
     },
   };
 }
