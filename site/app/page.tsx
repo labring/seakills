@@ -6,6 +6,7 @@ import { PipelineSection } from "@/components/pipeline-section"
 import { SetupSection } from "@/components/setup-section"
 import { ProjectStructure } from "@/components/project-structure"
 import { CtaSection } from "@/components/cta-section"
+import { GITHUB_URL, REPO } from "@/lib/constants"
 
 export default function Page() {
   return (
@@ -25,12 +26,12 @@ export default function Page() {
         <p className="font-mono text-xs text-muted-foreground">
           Built for the open agent skills ecosystem &middot; MIT License &middot;{" "}
           <a
-            href="https://github.com/zjy365/seakills"
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary transition-colors hover:text-primary/80"
           >
-            zjy365/seakills
+            {REPO}
           </a>
         </p>
       </footer>

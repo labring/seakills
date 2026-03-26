@@ -3,15 +3,13 @@
 import { useState, useCallback, useEffect } from "react"
 import { Check, Copy } from "lucide-react"
 import { motion } from "motion/react"
-
-const installCmd =
-  "curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash"
+import { GITHUB_URL, INSTALL_CMD } from "@/lib/constants"
 
 export function CtaSection() {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(installCmd)
+    navigator.clipboard.writeText(INSTALL_CMD)
     setCopied(true)
   }, [])
 
@@ -36,13 +34,13 @@ export function CtaSection() {
             Ready to Deploy?
           </h2>
           <p className="mx-auto mb-8 max-w-md text-sm text-muted-foreground">
-            Install the skill in seconds. Let your AI assistant handle the rest — from Dockerfile to live deployment.
+            Install through the standard skills ecosystem. Let your AI assistant handle the rest, from Dockerfile to live deployment.
           </p>
 
           <div className="mx-auto flex max-w-xl items-center gap-3 rounded-lg border border-border bg-background px-5 py-4 transition-colors duration-200 hover:border-primary/30">
             <span className="shrink-0 font-mono text-sm text-primary">$</span>
             <code className="flex-1 overflow-x-auto font-mono text-sm text-foreground scrollbar-none whitespace-nowrap">
-              {installCmd}
+              {INSTALL_CMD}
             </code>
             <button
               onClick={handleCopy}
@@ -59,7 +57,7 @@ export function CtaSection() {
 
           <div className="mt-8 flex items-center justify-center gap-6 text-sm text-muted-foreground">
             <a
-              href="https://github.com/zjy365/seakills"
+              href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 transition-colors hover:text-foreground"
@@ -72,7 +70,7 @@ export function CtaSection() {
             <span className="text-border">|</span>
             <span>MIT License</span>
             <span className="text-border">|</span>
-            <span>v1.1.0</span>
+            <span>v1.3.0</span>
           </div>
         </div>
       </motion.div>

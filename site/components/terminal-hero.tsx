@@ -3,14 +3,13 @@
 import { useEffect, useState, useCallback } from "react"
 import { Check, Copy } from "lucide-react"
 import { motion } from "motion/react"
-
-const installCmd = "curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash"
+import { INSTALL_CMD } from "@/lib/constants"
 
 export function TerminalHero() {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(installCmd)
+    navigator.clipboard.writeText(INSTALL_CMD)
     setCopied(true)
   }, [])
 
@@ -34,7 +33,7 @@ export function TerminalHero() {
         className="mb-8 flex items-center gap-2 rounded-full border border-border bg-secondary px-4 py-1.5 font-mono text-xs text-muted-foreground"
       >
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-        v1.1.0 — Agent Skill for AI Coding Assistants
+        v1.3.0 - Agent Skill for AI Coding Assistants
       </motion.div>
 
       {/* ASCII Art Title */}
@@ -76,7 +75,7 @@ export function TerminalHero() {
       >
         One command to deploy and update any project on Sealos Cloud.
         <br className="hidden md:block" />
-        Works with Claude Code, Gemini CLI, Codex — any AI coding assistant.
+        Installed through the open skills ecosystem for Claude Code, Gemini CLI, Codex, and more.
       </motion.p>
 
       {/* Install Command */}
@@ -89,7 +88,7 @@ export function TerminalHero() {
         <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-5 py-4 transition-colors duration-200 hover:border-primary/30">
           <span className="shrink-0 font-mono text-sm text-primary">$</span>
           <code className="flex-1 overflow-x-auto font-mono text-sm text-foreground scrollbar-none whitespace-nowrap">
-            {installCmd}
+            {INSTALL_CMD}
           </code>
           <button
             onClick={handleCopy}

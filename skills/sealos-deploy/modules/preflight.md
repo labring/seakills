@@ -101,11 +101,10 @@ docker info 2>/dev/null
 **Python:**
 - If missing, Sealos template validation (Phase 5) uses AI self-check instead of `quality_gate.py`
 
-**kubectl (required):**
-- Installed automatically by `install.sh` to `~/.agents/bin/kubectl`
-- If `kubectl` is not in PATH, use `~/.agents/bin/kubectl` as the absolute path for all kubectl commands
-- Enables in-place update of already-deployed apps (`kubectl set image`, `kubectl rollout`)
-- If somehow missing, guide user to re-run the installer: `curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash`
+**kubectl (required for in-place updates):**
+- Needed for updating already-deployed apps with `kubectl set image` and `kubectl rollout`
+- If `kubectl` is missing, ask the user to install it with their system package manager or official installation method
+- If `kubectl` is available outside PATH, use the absolute path for all kubectl commands
 
 ## Step 2: Project Context
 

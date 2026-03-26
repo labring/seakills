@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Check, Copy } from "lucide-react"
-
-const installCmd =
-  "curl -fsSL https://seakills.gzg.sealos.run/install.sh | bash"
+import { GITHUB_URL, INSTALL_CMD } from "@/lib/constants"
 
 export function Navbar() {
   const [copied, setCopied] = useState(false)
@@ -17,7 +15,7 @@ export function Navbar() {
   }, [])
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(installCmd)
+    navigator.clipboard.writeText(INSTALL_CMD)
     setCopied(true)
   }, [])
 
@@ -50,8 +48,8 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
-          <a
-            href="https://github.com/zjy365/seakills"
+            <a
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground sm:flex"
@@ -64,10 +62,11 @@ export function Navbar() {
 
           <button
             onClick={handleCopy}
+            aria-label="Copy install command"
             className="flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
           >
             <span className="text-primary">$</span>
-            <span className="hidden sm:inline">install</span>
+            <span className="hidden sm:inline">copy install</span>
             {copied ? (
               <Check className="h-3 w-3 text-primary" />
             ) : (

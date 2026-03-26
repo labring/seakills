@@ -4,7 +4,6 @@ import { motion, useInView } from "motion/react"
 import { useRef } from "react"
 
 const tree = [
-  { depth: 0, name: "install.sh", comment: "One-line installer", isFile: true },
   { depth: 0, name: "README.md", isFile: true },
   { depth: 0, name: "skills/" },
   { depth: 1, name: "sealos-deploy/", comment: "Main skill", highlight: true },
