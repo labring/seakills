@@ -15,8 +15,8 @@ All pipeline outputs are written under `.sealos/` in `WORK_DIR`:
 ├── config.json                   ← user configuration overrides (manual, committed to git)
 ├── state.json                    ← deployment state (auto-maintained after Phase 6)
 ├── analysis.json                 ← project analysis snapshot (regenerated each deploy)
-├── build/
-│   └── build-result.json         ← Phase 4 build metadata
+├── build/                        ← created only if Phase 4 actually runs
+│   └── build-result.json         ← Phase 4 result (`success` or `failed`)
 └── template/
     └── index.yaml                ← Phase 5 Sealos template
 ```
@@ -28,11 +28,27 @@ All pipeline outputs are written under `.sealos/` in `WORK_DIR`:
 
 **Note:** When reading dockerfile-skill modules (analyze.md, generate.md, build-fix.md), they reference `docker-build/` as their default output path. In this pipeline, always write to `.sealos/build/` instead. Similarly, template output goes to `.sealos/template/` instead of `template/`.
 
-At the very start of the pipeline (before Phase 1), create the artifact directory:
+JSON artifacts under `.sealos/` are governed by explicit schemas in `<SKILL_DIR>/schemas/`:
+- `config.schema.json`
+- `analysis.schema.json`
+- `build-result.schema.json`
+- `state.schema.json`
+
+Validate them with:
 
 ```bash
-mkdir -p "$WORK_DIR/.sealos/build" "$WORK_DIR/.sealos/template"
+node "<SKILL_DIR>/scripts/validate-artifacts.mjs" --dir "$WORK_DIR"
 ```
+
+Writers should validate on write; readers should validate before trusting resume/update state.
+
+At the very start of the pipeline (before Phase 1), create the base artifact directory:
+
+```bash
+mkdir -p "$WORK_DIR/.sealos" "$WORK_DIR/.sealos/template"
+```
+
+Create `"$WORK_DIR/.sealos/build"` lazily when Phase 4 starts. If Phase 2 finds an existing image and skips Phase 4, `build/` should remain absent rather than exist as an empty directory.
 
 **Read user config (if exists):**
 If `.sealos/config.json` exists, read it. User-provided values take priority over auto-detection and AI inference throughout the pipeline.
@@ -450,6 +466,12 @@ Alternative: log in to Docker Hub manually:
 
 Tag format: `<owner-or-user>/<repo-name>:YYYYMMDD-HHMMSS` (e.g., `ghcr.io/zhujingyang/kite:20260304-143022`). The timestamp ensures same-day rebuilds never collide.
 
+Before invoking the build helper, create the build artifact directory:
+
+```bash
+mkdir -p "$WORK_DIR/.sealos/build"
+```
+
 **If Node.js available:**
 ```bash
 node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>"
@@ -496,6 +518,13 @@ If build fails:
 6. If still failing → inform user with the specific error and suggest manual review
 
 ### 4.3 Record Result
+
+Always write `.sealos/build/build-result.json` when Phase 4 runs:
+
+- Success: `outcome: "success"` plus pushed image metadata
+- Failure: `outcome: "failed"` plus the captured error message
+
+This avoids leaving an empty `build/` directory after a failed build and makes resume/debug behavior inspectable.
 
 On success, record `IMAGE_REF` from the build output. The build result file is at `.sealos/build/build-result.json`.
 

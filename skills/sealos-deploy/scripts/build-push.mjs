@@ -19,6 +19,7 @@
 import { execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { validateArtifactData } from './artifact-validator.mjs'
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -31,6 +32,25 @@ function getDateTag () {
 
 function run (cmd, opts = {}) {
   return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
+}
+
+function ensureBuildDir (workDir) {
+  const buildDir = path.join(workDir, '.sealos', 'build')
+  fs.mkdirSync(buildDir, { recursive: true })
+  return buildDir
+}
+
+function writeBuildResult (workDir, payload) {
+  const validation = validateArtifactData('build-result', payload)
+  if (!validation.valid) {
+    throw new Error(`Invalid build-result artifact: ${validation.errors.map(err => `${err.path} ${err.message}`).join('; ')}`)
+  }
+
+  const buildDir = ensureBuildDir(workDir)
+  fs.writeFileSync(
+    path.join(buildDir, 'build-result.json'),
+    JSON.stringify(payload, null, 2),
+  )
 }
 
 // ── Registry Detection ───────────────────────────────────
@@ -92,6 +112,7 @@ function autoDetectRegistry () {
 function buildAndPush (workDir, repoName, registryInfo) {
   const tag = getDateTag()
   const sanitized = repoName.toLowerCase().replace(/[^a-z0-9_.-]/g, '-')
+  const startedAt = new Date().toISOString()
 
   let remoteImage
   if (registryInfo.registry === 'ghcr') {
@@ -102,6 +123,14 @@ function buildAndPush (workDir, repoName, registryInfo) {
 
   const dockerfilePath = path.join(workDir, 'Dockerfile')
   if (!fs.existsSync(dockerfilePath)) {
+    writeBuildResult(workDir, {
+      outcome: 'failed',
+      registry: registryInfo.registry,
+      build: { image_name: sanitized, started_at: startedAt },
+      push: { remote_image: remoteImage },
+      error: 'No Dockerfile found in work directory',
+      finished_at: new Date().toISOString(),
+    })
     return { success: false, error: 'No Dockerfile found in work directory' }
   }
 
@@ -111,22 +140,26 @@ function buildAndPush (workDir, repoName, registryInfo) {
       { cwd: workDir, stdio: 'pipe', timeout: 600000 },
     )
 
-    // Write build-result.json
-    const buildDir = path.join(workDir, '.sealos', 'build')
-    fs.mkdirSync(buildDir, { recursive: true })
-    fs.writeFileSync(
-      path.join(buildDir, 'build-result.json'),
-      JSON.stringify({
-        outcome: 'success',
-        registry: registryInfo.registry,
-        build: { image_name: sanitized },
-        push: { remote_image: remoteImage, pushed_at: new Date().toISOString() },
-      }, null, 2),
-    )
+    writeBuildResult(workDir, {
+      outcome: 'success',
+      registry: registryInfo.registry,
+      build: { image_name: sanitized, started_at: startedAt },
+      push: { remote_image: remoteImage, pushed_at: new Date().toISOString() },
+      finished_at: new Date().toISOString(),
+    })
 
     return { success: true, image: remoteImage, registry: registryInfo.registry }
   } catch (e) {
-    return { success: false, error: e.stderr?.toString() || e.message }
+    const error = e.stderr?.toString() || e.message
+    writeBuildResult(workDir, {
+      outcome: 'failed',
+      registry: registryInfo.registry,
+      build: { image_name: sanitized, started_at: startedAt },
+      push: { remote_image: remoteImage },
+      error,
+      finished_at: new Date().toISOString(),
+    })
+    return { success: false, error }
   }
 }
 
