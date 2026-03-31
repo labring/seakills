@@ -591,6 +591,7 @@ After generating the base template, check if the app needs its public URL config
 - `revisionHistoryLimit: 1`
 - `automountServiceAccountToken: false`
 - **App CRD** (last resource): only `spec.data.url`, `spec.displayType`, `spec.icon`, `spec.name`, `spec.type` — no other fields (no `menuData`, `nameColor`, `template`, etc.)
+- **App CRD fixed enums**: `spec.displayType` must be `normal`; `spec.type` must be `link`
 
 ### 5.3 Validate
 

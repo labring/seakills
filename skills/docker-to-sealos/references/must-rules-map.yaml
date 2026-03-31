@@ -40,6 +40,14 @@ must_rules:
     enforcement:
       type: rule
       target: R003
+  - must: "App resource `spec.displayType` must be `normal`."
+    enforcement:
+      type: rule
+      target: R032
+  - must: "App resource `spec.type` must be `link`."
+    enforcement:
+      type: rule
+      target: R033
   - must: "Never use `spec.template` in App resource."
     enforcement:
       type: rule
@@ -51,7 +59,7 @@ must_rules:
   - must: "`metadata.labels.app` label value must equal resource `metadata.name` for managed app workloads."
     enforcement:
       type: rule
-      target: R027
+      target: R034
   - must: "`containers[*].name` must equal workload `metadata.name` for managed app workloads."
     enforcement:
       type: rule

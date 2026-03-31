@@ -22,6 +22,12 @@ rules:
   - id: R003
     description: App resources must define spec.data.url.
     severity: error
+  - id: R032
+    description: App resources must define spec.displayType and it must be normal.
+    severity: error
+  - id: R033
+    description: App resources must define spec.type and it must be link.
+    severity: error
   - id: R004
     description: Template metadata.name must be hardcoded lowercase.
     severity: error
@@ -79,7 +85,7 @@ rules:
   - id: R008
     description: App workload cloud.sealos.io/app-deploy-manager label must exist and match metadata.name.
     severity: error
-  - id: R027
+  - id: R034
     description: Managed app workloads must define metadata.labels.app and match metadata.name.
     severity: error
   - id: R028

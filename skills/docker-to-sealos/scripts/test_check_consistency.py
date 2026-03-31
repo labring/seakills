@@ -151,6 +151,76 @@ class CheckConsistencyTests(unittest.TestCase):
         )
         self.assertTrue(any(item.rule_id == "R003" for item in violations))
 
+    def test_detects_missing_app_display_type(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: app.sealos.io/v1
+            kind: App
+            metadata:
+              name: app-demo
+            spec:
+              data:
+                url: https://demo.example.com
+              type: link
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R032" for item in violations))
+
+    def test_detects_invalid_app_display_type(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: app.sealos.io/v1
+            kind: App
+            metadata:
+              name: app-demo
+            spec:
+              data:
+                url: https://demo.example.com
+              displayType: standalone
+              type: link
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R032" for item in violations))
+
+    def test_detects_missing_app_type(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: app.sealos.io/v1
+            kind: App
+            metadata:
+              name: app-demo
+            spec:
+              data:
+                url: https://demo.example.com
+              displayType: normal
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R033" for item in violations))
+
+    def test_detects_invalid_app_type(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: app.sealos.io/v1
+            kind: App
+            metadata:
+              name: app-demo
+            spec:
+              data:
+                url: https://demo.example.com
+              displayType: normal
+              type: web
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R033" for item in violations))
+
     def test_detects_template_name_variable(self):
         violations = self.run_checker(
             """
@@ -1978,7 +2048,7 @@ class CheckConsistencyTests(unittest.TestCase):
             ```
             """
         )
-        self.assertTrue(any(item.rule_id == "R027" for item in violations))
+        self.assertTrue(any(item.rule_id == "R034" for item in violations))
 
     def test_detects_app_label_mismatch(self):
         violations = self.run_checker(
@@ -2003,7 +2073,7 @@ class CheckConsistencyTests(unittest.TestCase):
             ```
             """
         )
-        self.assertTrue(any(item.rule_id == "R027" for item in violations))
+        self.assertTrue(any(item.rule_id == "R034" for item in violations))
 
     def test_detects_container_name_mismatch(self):
         violations = self.run_checker(
@@ -2053,7 +2123,7 @@ class CheckConsistencyTests(unittest.TestCase):
             ```
             """
         )
-        self.assertFalse(any(item.rule_id in {"R027", "R028"} for item in violations))
+        self.assertFalse(any(item.rule_id in {"R034", "R028"} for item in violations))
 
     def test_detects_missing_revision_history_limit(self):
         violations = self.run_checker(
@@ -2338,6 +2408,8 @@ class CheckConsistencyTests(unittest.TestCase):
             spec:
               data:
                 url: https://demo.example.com
+              displayType: normal
+              type: link
             ```
             """
         )

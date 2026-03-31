@@ -6,9 +6,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from subprocess import CompletedProcess
+from typing import List, Optional
 
 import yaml
 
+from check_consistency_rule_registry import REGISTERED_RULES
 from check_consistency_runner import run_checks
 from compose_to_template import (
     MetadataOptions,
@@ -29,6 +31,19 @@ def write_file(path: Path, content: str) -> None:
 
 def parse_yaml_documents(path: Path):
     return list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+
+
+def render_registry(include_paths: Optional[List[str]] = None) -> str:
+    include_paths = include_paths or ["SKILL.md", "references/placeholder.md"]
+    lines = ["version: 1", "scope:", "  include:"]
+    for path in include_paths:
+        lines.append(f"    - {path}")
+    lines.append("rules:")
+    for rule_id in sorted(REGISTERED_RULES.keys()):
+        lines.append(f"  - id: {rule_id}")
+        lines.append("    description: test")
+        lines.append("    severity: error")
+    return "\n".join(lines) + "\n"
 
 
 class ComposeToTemplateTests(unittest.TestCase):
@@ -124,12 +139,21 @@ class ComposeToTemplateTests(unittest.TestCase):
                 },
                 ingress["metadata"]["annotations"],
             )
+            app = next(doc for doc in docs if doc.get("kind") == "App")
+            self.assertEqual("normal", app["spec"]["displayType"])
+            self.assertEqual("link", app["spec"]["type"])
 
             skill_root = Path(__file__).resolve().parent.parent
+            checker_skill = root / "SKILL.md"
+            checker_refs = root / "references"
+            checker_registry = checker_refs / "rules-registry.yaml"
+            write_file(checker_skill, "# local checker scope\n")
+            write_file(checker_refs / "placeholder.md", "# refs\n")
+            checker_registry.write_text(render_registry(), encoding="utf-8")
             violations = run_checks(
-                skill_path=skill_root / "SKILL.md",
-                references_dir=skill_root / "references",
-                registry_path=skill_root / "references" / "rules-registry.yaml",
+                skill_path=checker_skill,
+                references_dir=checker_refs,
+                registry_path=checker_registry,
                 additional_include_paths=[str(index_path)],
             )
             self.assertEqual([], violations)

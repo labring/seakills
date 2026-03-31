@@ -146,6 +146,8 @@ spec:
 | `name` | string | no | Human-readable title shown in dashboard |
 | `type` | string | no | Entry type (`link`) |
 
+**When generating templates in this repository, treat these enum values as fixed:** `displayType` must be `normal`, and `type` must be `link`. Do not emit alternatives such as `standalone` or `web`.
+
 **Do NOT add any other fields.** Fields like `menuData`, `nameColor`, `template`, etc. do not exist in the App CRD and will cause `strict decoding error: unknown field` on apply.
 
 ## Defaults and Inputs Configuration Specification

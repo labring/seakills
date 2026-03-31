@@ -103,6 +103,8 @@ If validation fails, fix template/rules/examples first.
 ### App resource
 
 - App resource must use `spec.data.url`.
+- App resource `spec.displayType` must be `normal`.
+- App resource `spec.type` must be `link`.
 - Never use `spec.template` in App resource.
 - `cloud.sealos.io/app-deploy-manager` label value must equal resource `metadata.name`.
 - `metadata.labels.app` label value must equal resource `metadata.name` for managed app workloads.
@@ -245,6 +247,7 @@ Load only needed references for current task:
 
 - Never ask users for missing fields; infer from compose/docs and platform conventions.
 - Keep App resource in `spec.data.url` format; never use `spec.template`.
+- Keep App resource `spec.displayType: normal` and `spec.type: link`; do not infer alternative enum values.
 - Keep business-env, object storage, and DB-secret policy consistent with MUST rules.
 - Prefer Sealos-managed ingress over bundled edge proxies: if a Traefik gateway is only acting as ingress/front-proxy and at least one business service exists, do not emit Traefik workload resources.
 - Prefer gateway TLS termination in Sealos Ingress over in-container TLS: for dual-port HTTP/HTTPS workloads, keep HTTP service port and remove redundant HTTPS/certificate mounts unless official docs require HTTPS backend.

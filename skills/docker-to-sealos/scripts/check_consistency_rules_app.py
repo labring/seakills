@@ -278,6 +278,58 @@ def check_app_has_spec_data_url(context: ScanContext) -> List[Violation]:
     return violations
 
 
+def _check_app_spec_exact_string(
+    context: ScanContext,
+    *,
+    rule_id: str,
+    field_name: str,
+    expected: str,
+) -> List[Violation]:
+    violations: List[Violation] = []
+    for doc in iter_documents_by_kind(context, "App"):
+        spec = doc.data.get("spec") if isinstance(doc.data, dict) else None
+        value = spec.get(field_name) if isinstance(spec, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            add_doc_violation(
+                violations,
+                rule_id=rule_id,
+                doc=doc,
+                pattern=rf"^\s*{re.escape(field_name)}\s*:",
+                default_pattern=r"^\s*spec\s*:",
+                message=f"App resource must define spec.{field_name}: {expected}",
+            )
+            continue
+
+        if value.strip() != expected:
+            add_doc_violation(
+                violations,
+                rule_id=rule_id,
+                doc=doc,
+                pattern=rf"^\s*{re.escape(field_name)}\s*:",
+                default_pattern=r"^\s*spec\s*:",
+                message=f"App resource spec.{field_name} must be {expected!r}",
+            )
+    return violations
+
+
+def check_app_display_type_normal(context: ScanContext) -> List[Violation]:
+    return _check_app_spec_exact_string(
+        context,
+        rule_id="R032",
+        field_name="displayType",
+        expected="normal",
+    )
+
+
+def check_app_type_link(context: ScanContext) -> List[Violation]:
+    return _check_app_spec_exact_string(
+        context,
+        rule_id="R033",
+        field_name="type",
+        expected="link",
+    )
+
+
 def check_template_name_is_hardcoded_lowercase(context: ScanContext) -> List[Violation]:
     violations: List[Violation] = []
     for doc in iter_documents_by_kind(context, "Template"):
@@ -556,7 +608,7 @@ def check_app_label_match_name(context: ScanContext) -> List[Violation]:
         if not isinstance(label_value, str) or not label_value.strip():
             add_doc_violation(
                 violations,
-                rule_id="R027",
+                rule_id="R034",
                 doc=doc,
                 pattern=r"^\s*app\s*:",
                 default_pattern=r"^\s*metadata\s*:",
@@ -566,7 +618,7 @@ def check_app_label_match_name(context: ScanContext) -> List[Violation]:
         if label_value != name:
             add_doc_violation(
                 violations,
-                rule_id="R027",
+                rule_id="R034",
                 doc=doc,
                 pattern=r"^\s*app\s*:",
                 default_pattern=r"^\s*metadata\s*:",
@@ -1344,6 +1396,8 @@ APP_RULES: Dict[str, Rule] = {
     "R018": Rule("R018", check_no_compose_image_variables),
     "R002": Rule("R002", check_app_no_spec_template),
     "R003": Rule("R003", check_app_has_spec_data_url),
+    "R032": Rule("R032", check_app_display_type_normal),
+    "R033": Rule("R033", check_app_type_link),
     "R004": Rule("R004", check_template_name_is_hardcoded_lowercase),
     "R012": Rule("R012", check_template_required_metadata_fields),
     "R013": Rule("R013", check_template_folder_matches_name),
@@ -1361,7 +1415,7 @@ APP_RULES: Dict[str, Rule] = {
     "R026": Rule("R026", check_http_ingress_annotations),
     "R027": Rule("R027", check_postgres_custom_db_init_job),
     "R008": Rule("R008", check_deploy_manager_label_match_name),
-    "R027": Rule("R027", check_app_label_match_name),
+    "R034": Rule("R034", check_app_label_match_name),
     "R028": Rule("R028", check_container_names_match_workload_name),
     "R009": Rule("R009", check_revision_history_limit),
     "R010": Rule("R010", check_automount_service_account_token),
