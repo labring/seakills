@@ -11,6 +11,18 @@ That means:
 Preflight is responsible for early detection, but only some failures are immediate stop conditions.
 Do not treat Docker, `gh`, or `buildx` as universal entry requirements — they become mandatory only if the run actually needs local image build/push.
 
+## Tool Install Policy
+
+When `docker`, `gh`, or `kubectl` is missing, do not just print commands and stop.
+Ask directly:
+
+```text
+Missing <tool>. Install it now? (y/n)
+```
+
+If the user answers `y`, install the tool for the current platform, then re-run the corresponding check.
+If the install command needs elevated privileges, package-manager setup, or manual UI interaction, explain that before running it.
+
 ## Step 1: Environment Detection (cached)
 
 Environment info (tool versions) rarely changes. Cache it in `~/.sealos/env.json` to avoid re-detecting every run.
@@ -86,8 +98,10 @@ docker info 2>/dev/null
 ```
 
 - Not installed → guide by platform:
-  - macOS: `brew install --cask docker` then open Docker Desktop
-  - Linux: `curl -fsSL https://get.docker.com | sh`
+  - Ask: `Missing Docker. Install it now? (y/n)`
+  - If user answers `y`:
+    - macOS: run `brew install --cask docker`, then tell the user to open Docker Desktop
+    - Linux: run `curl -fsSL https://get.docker.com | sh`
 - Installed but daemon not running → "Please start Docker Desktop (macOS) or `sudo systemctl start docker` (Linux)."
 
 **git** — if missing (from cache or detection):
@@ -100,6 +114,13 @@ docker info 2>/dev/null
 - `build-push.mjs` auto-detects `gh auth status` and uses `gh auth token` to login to `ghcr.io`
 - Missing `gh` is **not** a universal preflight failure
 - `gh` becomes mandatory only when the selected path needs local build + push to GHCR
+- If `gh` is missing, ask:
+  - `Missing gh. Install it now? (y/n)`
+  - If user answers `y`:
+    - macOS: run `brew install gh`
+    - Debian/Ubuntu: run `sudo apt install gh`
+- Do not trigger `gh auth login` during environment detection
+- Only trigger `gh auth login` later if the run actually reaches a GHCR push path
 
 **Node.js:**
 - If missing, no problem. Pipeline uses fallback mode:
@@ -113,7 +134,11 @@ docker info 2>/dev/null
 
 **kubectl (required for in-place updates):**
 - Needed for updating already-deployed apps with `kubectl set image` and `kubectl rollout`
-- If `kubectl` is missing, ask the user to install it with their system package manager or official installation method
+- If `kubectl` is missing, ask:
+  - `Missing kubectl. Install it now? (y/n)`
+  - If user answers `y`:
+    - macOS: run `brew install kubectl`
+    - Debian/Ubuntu: run `sudo apt install kubectl`
 - If `kubectl` is available outside PATH, use the absolute path for all kubectl commands
 
 ## Step 2: Capability Classification

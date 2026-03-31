@@ -17,6 +17,8 @@ All kubectl commands MUST use the Sealos kubeconfig:
 KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify
 ```
 
+System tool installation requires user confirmation. If `docker`, `gh`, or `kubectl` is missing and the skill can install it for the current platform, ask first and only run the install command after the user explicitly replies `y`.
+
 **`kubectl delete` requires user confirmation.** Before deleting any resource (deployment, service, ingress, PVC, database, etc.), always ask:
 ```
 ⚠️ 即将删除 <resource kind>/<resource name>，数据不可恢复。确认？(y/n)
