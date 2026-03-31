@@ -427,7 +427,7 @@ If Phase 2 found an existing image, this phase is skipped entirely.
 
 **Priority order (fully automatic when gh CLI is present):**
 
-**1. GHCR via gh CLI (preferred — zero user interaction):**
+**1. GHCR via gh CLI (preferred):**
 ```bash
 gh auth status 2>/dev/null
 ```
@@ -437,13 +437,17 @@ GH_USER=$(gh api user -q .login)
 gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
 REGISTRY=ghcr
 ```
-This is completely transparent to the user — no prompts, no account creation, no manual login.
+If `gh` is installed but not authenticated, explicitly tell the user that GHCR push requires GitHub CLI login, then trigger:
+```bash
+gh auth login
+```
+After successful login, retry GHCR authentication and continue.
 
-**2. Docker Hub (fallback — already logged in):**
+**2. Docker Hub (fallback — only when gh CLI is unavailable):**
 ```bash
 docker info 2>/dev/null | grep "Username:"
 ```
-If a Docker Hub session exists, use it:
+If `gh` is not installed and a Docker Hub session exists, use it:
 ```bash
 DOCKER_HUB_USER=<extracted username>
 REGISTRY=dockerhub
@@ -454,7 +458,7 @@ Recommend gh CLI (easiest path):
 ```
 No container registry available.
 
-Recommended: install GitHub CLI for zero-config image push:
+Recommended: install GitHub CLI for GHCR push:
   brew install gh && gh auth login    # macOS
   sudo apt install gh && gh auth login # Linux
 
@@ -489,6 +493,12 @@ TAG=$(date +%Y%m%d-%H%M%S)
 
 # GHCR path (if gh CLI available)
 if gh auth status 2>/dev/null; then
+  GH_USER=$(gh api user -q .login)
+  gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
+  IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"
+elif command -v gh >/dev/null 2>&1; then
+  echo "gh CLI is installed but not authenticated. Starting gh auth login..."
+  gh auth login
   GH_USER=$(gh api user -q .login)
   gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
   IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"

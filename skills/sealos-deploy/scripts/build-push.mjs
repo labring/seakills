@@ -34,6 +34,15 @@ function run (cmd, opts = {}) {
   return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
 }
 
+function hasGhCli () {
+  try {
+    run('gh --version')
+    return true
+  } catch {
+    return false
+  }
+}
+
 function ensureBuildDir (workDir) {
   const buildDir = path.join(workDir, '.sealos', 'build')
   fs.mkdirSync(buildDir, { recursive: true })
@@ -66,6 +75,36 @@ function detectGhcr () {
   }
 }
 
+function promptGhLogin () {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return {
+      ok: false,
+      error: 'gh CLI is installed but not authenticated, and interactive login is not available in this terminal. Run: gh auth login',
+    }
+  }
+
+  console.error('gh CLI is installed but not authenticated. Opening `gh auth login` for GHCR access...')
+
+  try {
+    execSync('gh auth login', { stdio: 'inherit' })
+  } catch {
+    return {
+      ok: false,
+      error: 'gh auth login was not completed. GHCR push requires a successful GitHub CLI login.',
+    }
+  }
+
+  const ghcr = detectGhcr()
+  if (!ghcr) {
+    return {
+      ok: false,
+      error: 'gh auth login completed, but GitHub CLI is still not authenticated for GHCR use.',
+    }
+  }
+
+  return { ok: true, registryInfo: ghcr }
+}
+
 function loginGhcr (user) {
   try {
     const token = run('gh auth token')
@@ -74,6 +113,38 @@ function loginGhcr (user) {
   } catch (e) {
     return false
   }
+}
+
+function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
+  if (!hasGhCli()) {
+    return {
+      ok: false,
+      error: 'gh CLI is not installed. Install it with: brew install gh && gh auth login',
+    }
+  }
+
+  let ghcr = detectGhcr()
+  if (!ghcr && triggerLogin) {
+    const loginResult = promptGhLogin()
+    if (!loginResult.ok) return loginResult
+    ghcr = loginResult.registryInfo
+  }
+
+  if (!ghcr) {
+    return {
+      ok: false,
+      error: 'gh CLI not authenticated. Run: gh auth login',
+    }
+  }
+
+  if (!loginGhcr(ghcr.user)) {
+    return {
+      ok: false,
+      error: 'Failed to login to ghcr.io via gh CLI',
+    }
+  }
+
+  return { ok: true, registryInfo: ghcr }
 }
 
 function detectDockerHub () {
@@ -93,10 +164,10 @@ function detectDockerHub () {
  */
 function autoDetectRegistry () {
   // 1. Try GHCR via gh CLI
-  const ghcr = detectGhcr()
-  if (ghcr) {
-    const loggedIn = loginGhcr(ghcr.user)
-    if (loggedIn) return ghcr
+  if (hasGhCli()) {
+    const ghcrResult = ensureGhcrRegistry({ triggerLogin: true })
+    if (ghcrResult.ok) return ghcrResult.registryInfo
+    throw new Error(ghcrResult.error)
   }
 
   // 2. Try Docker Hub (already logged in)
@@ -197,16 +268,12 @@ let registryInfo
 
 if (args.registry === 'ghcr') {
   // Explicit GHCR
-  const ghcr = detectGhcr()
-  if (!ghcr) {
-    console.log(JSON.stringify({ success: false, error: 'gh CLI not authenticated. Run: gh auth login' }))
+  const ghcrResult = ensureGhcrRegistry({ triggerLogin: true })
+  if (!ghcrResult.ok) {
+    console.log(JSON.stringify({ success: false, error: ghcrResult.error }))
     process.exit(1)
   }
-  if (!loginGhcr(ghcr.user)) {
-    console.log(JSON.stringify({ success: false, error: 'Failed to login to ghcr.io via gh CLI' }))
-    process.exit(1)
-  }
-  registryInfo = ghcr
+  registryInfo = ghcrResult.registryInfo
 } else if (args.registry === 'dockerhub') {
   // Explicit Docker Hub
   if (!args.user) {
@@ -221,7 +288,15 @@ if (args.registry === 'ghcr') {
   }
 } else {
   // Auto-detect
-  registryInfo = autoDetectRegistry()
+  try {
+    registryInfo = autoDetectRegistry()
+  } catch (error) {
+    console.log(JSON.stringify({
+      success: false,
+      error: error.message,
+    }))
+    process.exit(1)
+  }
   if (!registryInfo) {
     console.log(JSON.stringify({
       success: false,
