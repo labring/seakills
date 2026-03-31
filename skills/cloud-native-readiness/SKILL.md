@@ -1,7 +1,6 @@
 ---
 name: cloud-native-readiness
 description: Assess whether a project is ready for cloud-native deployment. Evaluates statelessness, config, scalability, and produces a readiness score (0-12). Use when user asks about containerization readiness, Docker/Kubernetes compatibility, deployment feasibility, whether their app can run in containers or the cloud, or wants a pre-deployment assessment. Also triggers on "/cloud-native-readiness".
-allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 ---
 
 # Cloud Native Readiness Assessment Skill

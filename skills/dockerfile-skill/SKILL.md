@@ -1,7 +1,6 @@
 ---
 name: dockerfile-skill
 description: Generate production-ready Dockerfile for any GitHub project. Supports monorepo, multi-stage builds, workspace detection, and iterative build-fix cycles. Use when user asks to create, generate, write, fix, or improve a Dockerfile, wants to containerize an application, mentions Docker build issues, needs a .dockerignore, or wants to package their app as a Docker image. Also triggers on "/dockerfile".
-allowed-tools: Read Glob Grep Bash Write Edit WebFetch
 ---
 
 # Dockerfile Generator Skill

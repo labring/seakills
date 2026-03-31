@@ -36,7 +36,7 @@ your agent can do it for you through one guided skill flow.
 Install the skills:
 
 ```bash
-npx skills add zjy365/seakills
+npx skills add labring/seakills
 ```
 
 Open your project in your AI agent, then run:

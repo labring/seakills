@@ -22,7 +22,7 @@ cd site && docker build -t seakills-site . && docker run -p 3000:3000 seakills-s
 ```
 
 ### CI
-GitHub Actions (`.github/workflows/deploy-site.yml`) triggers on push to `main` when `skills/**` or `site/**` change. It builds and pushes a Docker image to `ghcr.io/zjy365/seakills-site`.
+GitHub Actions (`.github/workflows/deploy-site.yml`) triggers on push to `main` when `skills/**` or `site/**` change. It builds and pushes a Docker image to `ghcr.io/labring/seakills-site`.
 
 ## Architecture
 
