@@ -1,7 +1,7 @@
 ---
 name: sealos-deploy
 description: Deploy any GitHub project to Sealos Cloud in one command. Assesses readiness, generates Dockerfile, builds image, creates Sealos template, and deploys — fully automated. Use when user says "deploy to sealos", "deploy this project", "deploy to cloud", "deploy this repo", mentions Sealos deployment, wants to deploy a GitHub URL or local project to a cloud platform, or asks about one-click deployment. Also triggers on "/sealos-deploy".
-compatibility: Requires Docker, git. Optional Node.js 18+, Python 3.8+, gh CLI (enables zero-interaction GHCR push).
+compatibility: Sealos auth/workspace are required for deploys. Docker, buildx, and gh CLI are required only when the selected path needs local build/push. git is required when cloning from a GitHub URL or when git metadata is needed. Node.js 18+ and Python 3.8+ remain optional accelerators.
 metadata:
   author: zjy365
 allowed-tools: Read Glob Grep Bash Write Edit WebFetch
@@ -140,7 +140,7 @@ Paths used in pipeline.md follow the pattern:
 
 | Phase | Action | Skip When |
 |-------|--------|-----------|
-| 0 — Preflight | Docker + Sealos auth (registry auth deferred to Phase 4) | All checks pass |
+| 0 — Preflight | Capability scan, path-specific warnings, Sealos auth | Initial blockers resolved |
 | 1 — Assess | Clone repo (or use current project), analyze deployability | Score too low → stop |
 | 2 — Detect | Find existing image (Docker Hub / GHCR / README) | Found → jump to Phase 5 |
 | 3 — Dockerfile | Generate Dockerfile if missing | Already has one → skip |
@@ -155,7 +155,7 @@ Paths used in pipeline.md follow the pattern:
 Input (GitHub URL / local path)
   │
   ▼
-[Phase 0] Preflight ── fail → guide user to fix
+[Phase 0] Preflight ── fail → guide user to fix and STOP
   │ pass
   ▼
 [Phase 1] Assess ── not suitable → STOP with reason
@@ -169,7 +169,7 @@ Input (GitHub URL / local path)
 [Phase 3] Dockerfile (generate/reuse)   │
   │                                     │
   ▼                                     │
-[Phase 4] Build & Push to Docker Hub    │
+[Phase 4] Build & Push to registry      │
   │                                     │
   ◄─────────────────────────────────────┘
   │
@@ -185,3 +185,5 @@ Input (GitHub URL / local path)
   ▼
 Done — app deployed ✓
 ```
+
+**Execution rule:** Phase 1 must never start while Phase 0 still has unresolved entry blockers. Docker, `gh`, builder, and registry failures must be reported early, but only become hard blockers if the run later requires local build/push.

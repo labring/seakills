@@ -2,6 +2,15 @@
 
 Detect the user's environment, record what's available, guide them to fix what's missing.
 
+**Hard rule:** Every run must start with a preflight capability scan before touching the project.
+That means:
+- Detect tool availability first
+- Detect auth/workspace state first
+- Record which later phases are currently blocked
+
+Preflight is responsible for early detection, but only some failures are immediate stop conditions.
+Do not treat Docker, `gh`, or `buildx` as universal entry requirements — they become mandatory only if the run actually needs local image build/push.
+
 ## Step 1: Environment Detection (cached)
 
 Environment info (tool versions) rarely changes. Cache it in `~/.sealos/env.json` to avoid re-detecting every run.
@@ -19,7 +28,7 @@ If the file exists, check `cached_at` — if less than **24 hours** old, use cac
 Run all checks:
 
 ```bash
-# Required
+# Commonly needed
 docker --version 2>/dev/null
 git --version 2>/dev/null
 
@@ -30,7 +39,7 @@ python3 --version 2>/dev/null
 # Optional (enables GHCR push — preferred over Docker Hub)
 gh --version 2>/dev/null
 
-# Required (enables in-place updates of deployed apps)
+# Conditional (required for update-mode rollout operations)
 # Check PATH first, then fallback to ~/.agents/bin/
 kubectl version --client 2>/dev/null || ~/.agents/bin/kubectl version --client 2>/dev/null
 
@@ -60,10 +69,10 @@ Record as `ENV`:
 ```
 ENV.docker    = true/false
 ENV.git       = true/false
-ENV.node      = true/false   (18+ required)
+ENV.node      = true/false
 ENV.python    = true/false
-ENV.kubectl   = true/false   (if false, check ~/.agents/bin/kubectl)
-ENV.gh        = true/false   (enables GHCR push — preferred over Docker Hub)
+ENV.kubectl   = true/false   (required for update-mode rollout operations)
+ENV.gh        = true/false   (enables zero-interaction GHCR push)
 ENV.curl      = true/false
 ENV.jq        = true/false
 ```
@@ -84,12 +93,13 @@ docker info 2>/dev/null
 **git** — if missing (from cache or detection):
 - `brew install git` (macOS) or `sudo apt install git` (Linux)
 
-### Optional tools — scripts run faster, but AI can do the same work
+### Optional and Path-Dependent Tools
 
 **gh CLI (GitHub CLI):**
-- If present and authenticated → enables **zero-interaction GHCR push** (preferred over Docker Hub)
+- If present and authenticated → enables **zero-interaction GHCR push**
 - `build-push.mjs` auto-detects `gh auth status` and uses `gh auth token` to login to `ghcr.io`
-- If missing → falls back to Docker Hub login (manual `docker login` required)
+- Missing `gh` is **not** a universal preflight failure
+- `gh` becomes mandatory only when the selected path needs local build + push to GHCR
 
 **Node.js:**
 - If missing, no problem. Pipeline uses fallback mode:
@@ -106,7 +116,60 @@ docker info 2>/dev/null
 - If `kubectl` is missing, ask the user to install it with their system package manager or official installation method
 - If `kubectl` is available outside PATH, use the absolute path for all kubectl commands
 
-## Step 2: Project Context
+## Step 2: Capability Classification
+
+Before touching the project, classify findings into:
+- immediate stop conditions
+- warnings that may become blocking later
+- optional accelerators
+
+### 2.1 Immediate Stop Conditions
+
+Stop before project inspection only when one of these is true:
+- Sealos authentication is unavailable and cannot be completed
+- Workspace selection is incomplete
+- The user provided a GitHub URL and `git` is unavailable, so the repository cannot be cloned
+- `curl` is unavailable, so auth and fallback API checks cannot run
+
+These are true entry blockers for a deploy run.
+
+### 2.2 Build-Path Warnings
+
+Detect these now and report them early, but do **not** stop the run yet:
+- Docker CLI missing
+- Docker daemon not running
+- `gh` missing
+- `gh auth status` failing
+- Docker builder unavailable (`docker buildx version` or equivalent)
+- Container registry connectivity looks unhealthy
+
+These findings become hard blockers only if the run later determines that local image build/push is required.
+
+### 2.3 Update-Path Warnings
+
+Detect these now and report them early, but do **not** stop a fresh deploy:
+- `kubectl` missing
+- kubeconfig present but unusable
+
+These become hard blockers only if the run enters UPDATE mode or needs rollout verification through kubectl.
+
+### 2.4 Early Reporting Rule
+
+At the end of preflight, explicitly tell the user:
+- which items are ready
+- which items are warnings only
+- which later path each warning would block
+
+Example:
+- "Docker is not ready. This will block Phase 4 local build, but we can still continue to detect whether an existing image can be reused."
+- "`kubectl` is missing. Fresh deploy can continue, but UPDATE mode and rollout verification will be blocked until it is installed."
+
+## Step 3: Project Context
+
+**Execution order override:** Do **not** execute this section until Step 4 auth/workspace checks are complete.
+Run **Step 4: Sealos Cloud Auth** first, satisfy the immediate stop conditions, then come back to Step 3.
+
+This section is intentionally documented here for readability, but it is operationally blocked behind Step 4.
 
 Determine what we're deploying and gather project information.
 
@@ -172,11 +235,13 @@ Record key findings in `PROJECT.readme_summary` for use in Phase 1 (assess) and 
 
 This avoids re-reading README in every phase. The AI already has it in context.
 
-## Step 3: Sealos Cloud Auth (OAuth2 Device Grant Flow)
+## Step 4: Sealos Cloud Auth (OAuth2 Device Grant Flow)
+
+This step must complete before Step 3 project context begins in practice.
 
 Uses RFC 8628 Device Authorization Grant — no token copy-paste needed.
 
-### 3.0 Region Selection
+### 4.0 Region Selection
 
 Before auth, let the user choose which Sealos Cloud region to deploy to.
 
@@ -212,7 +277,7 @@ Record the user's choice as `REGION` for use throughout the rest of this step an
 
 **If the user picks a different region than the existing `~/.sealos/auth.json`**, the existing kubeconfig is invalid — force re-authentication.
 
-### 3.1 Check auth status:
+### 4.1 Check auth status:
 
 **With Node.js:**
 ```bash
@@ -225,7 +290,7 @@ Returns: `{ "authenticated": true/false, "kubeconfig_path": "...", "workspace": 
 test -f ~/.sealos/kubeconfig && echo '{"authenticated":true}' || echo '{"authenticated":false}'
 ```
 
-### 3.2 If not authenticated — Device Grant Login:
+### 4.2 If not authenticated — Device Grant Login:
 
 **With Node.js (recommended):**
 ```bash
@@ -345,7 +410,7 @@ EOF
 chmod 600 ~/.sealos/auth.json
 ```
 
-### 3.3 Workspace Selection (every deploy)
+### 4.3 Workspace Selection (every deploy)
 
 After auth is confirmed, **always** let the user choose which workspace to deploy to. The last-used workspace is the default.
 
@@ -417,7 +482,13 @@ REGIONAL_TOKEN="$NEW_TOKEN"
 
 **If only one workspace exists**, skip the selection prompt and use it directly.
 
-## Ready
+## Step 5: Ready
+
+Only reach this section after:
+- Step 1 environment detection/checks passed
+- Step 2 capability classification completed
+- Step 4 auth/workspace checks passed
+- And only then Step 3 project context was collected
 
 Report to user:
 
@@ -428,18 +499,18 @@ Project:
   ✓ README: <one-line summary of what the project does>
 
 Environment:                      (cached / refreshed)
-  ✓ Docker <version>
+  ○ Docker <version>         (or: ✗ Docker — local build path currently blocked)
   ✓ git <version>
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)
   ○ Python <version>          (or: ✗ Python — template validation via AI)
-  ✓ kubectl <version>
-  ○ gh <version>              (or: ✗ gh CLI — will use Docker Hub for push)
+  ○ kubectl <version>        (or: ✗ kubectl — update/rollout path blocked)
+  ○ gh <version>             (or: ✗ gh CLI — local GHCR push path blocked)
 
 Auth:
   ✓ Sealos Cloud (<region>)
   ✓ Workspace: <ns-id> (<teamName>)
 ```
 
-Note: Container registry login is NOT checked here. It is only required if Phase 2 finds no existing image and we need to build & push (Phase 4). If `gh` CLI is authenticated, GHCR login happens automatically — no user interaction needed.
+If Docker, `gh`, buildx, or registry connectivity are not ready, report them now as path-specific warnings. Only upgrade them to hard blockers if Phase 2/3 confirms that local build/push is required.
 
 Record `ENV` and `PROJECT` for subsequent phases → proceed to `modules/pipeline.md`.
