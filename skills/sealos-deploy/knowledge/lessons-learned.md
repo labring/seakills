@@ -56,6 +56,8 @@ decision:
     require: "create or refresh the namespace image pull Secret automatically before deploy/update"
   else:
     fallback: "package must be public, or the operator must provide registry pull credentials another way"
+  skip_when:
+    - "Phase 2 reused an existing public image"
 
 verification:
   visibility_check: "gh api /user/packages/container/<repo> -q .visibility"
