@@ -20,7 +20,7 @@ import { execFileSync, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { validateArtifactData } from './artifact-validator.mjs'
-import { ensureGhScopes, hasGhCli, run } from './gh-auth-utils.mjs'
+import { ensureGhScopesWithPrompt, hasGhCli, run } from './gh-auth-utils.mjs'
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -111,8 +111,8 @@ function loginGhcr (user) {
   }
 }
 
-function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
-  const requiredScopes = ['read:packages', 'write:packages']
+async function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
+  const requiredScopes = ['write:packages']
 
   if (!hasGhCli()) {
     return {
@@ -135,7 +135,10 @@ function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
     }
   }
 
-  const scopeCheck = ensureGhScopes(requiredScopes, 'GHCR push and later private-image deploy')
+  const scopeCheck = await ensureGhScopesWithPrompt(
+    requiredScopes,
+    'GHCR push and later private-image deploy',
+  )
   if (!scopeCheck.ok) {
     return scopeCheck
   }
@@ -231,12 +234,12 @@ function detectDockerHub () {
  * Auto-detect the best available registry.
  * Priority: GHCR (via gh CLI) > Docker Hub (already logged in)
  */
-function autoDetectRegistry () {
+async function autoDetectRegistry () {
   // 1. Try GHCR via gh CLI
   if (hasGhCli()) {
-    const ghcrResult = ensureGhcrRegistry({ triggerLogin: true })
+    const ghcrResult = await ensureGhcrRegistry({ triggerLogin: true })
     if (ghcrResult.ok) return ghcrResult.registryInfo
-    throw new Error(ghcrResult.error)
+    throw ghcrResult
   }
 
   // 2. Try Docker Hub (already logged in)
@@ -352,9 +355,9 @@ let registryInfo
 
 if (args.registry === 'ghcr') {
   // Explicit GHCR
-  const ghcrResult = ensureGhcrRegistry({ triggerLogin: true })
+  const ghcrResult = await ensureGhcrRegistry({ triggerLogin: true })
   if (!ghcrResult.ok) {
-    console.log(JSON.stringify({ success: false, error: ghcrResult.error }))
+    console.log(JSON.stringify({ success: false, ...(ghcrResult.error ? ghcrResult : { error: 'Failed to prepare GHCR registry access' }) }))
     process.exit(1)
   }
   registryInfo = ghcrResult.registryInfo
@@ -373,11 +376,12 @@ if (args.registry === 'ghcr') {
 } else {
   // Auto-detect
   try {
-    registryInfo = autoDetectRegistry()
+    registryInfo = await autoDetectRegistry()
   } catch (error) {
+    const structured = error && typeof error === 'object' && 'error' in error
     console.log(JSON.stringify({
       success: false,
-      error: error.message,
+      ...(structured ? error : { error: error.message }),
     }))
     process.exit(1)
   }
