@@ -23,19 +23,11 @@ Missing <tool>. Install it now? (y/n)
 If the user answers `y`, install the tool for the current platform, then re-run the corresponding check.
 If the install command needs elevated privileges, package-manager setup, or manual UI interaction, explain that before running it.
 
-## Step 1: Environment Detection (cached)
+## Step 1: Environment Detection
 
-Environment info (tool versions) rarely changes. Cache it in `~/.sealos/env.json` to avoid re-detecting every run.
+Detect the local toolchain on every run. These checks are fast, and re-running them avoids stale results after the user installs a missing dependency such as `gh` or `kubectl`.
 
-### 1.1 Check Cache
-
-```bash
-cat ~/.sealos/env.json 2>/dev/null
-```
-
-If the file exists, check `cached_at` — if less than **24 hours** old, use cached values directly and **skip to Step 1.3** (Docker daemon check).
-
-### 1.2 Detect & Save (only when cache missing or expired)
+### 1.1 Detect Installed Tools
 
 Run all checks:
 
@@ -60,21 +52,6 @@ curl --version 2>/dev/null | head -1
 which jq 2>/dev/null
 ```
 
-Save results to `~/.sealos/env.json`:
-```json
-{
-  "docker": "28.5.2",
-  "git": "2.39.5",
-  "node": "20.4.0",
-  "python": "3.9.6",
-  "kubectl": "1.31.0",
-  "gh": "2.65.0",
-  "curl": true,
-  "jq": true,
-  "cached_at": "2026-03-05T14:30:00Z"
-}
-```
-
 Version strings are present when installed, `null` when missing.
 
 Record as `ENV`:
@@ -89,9 +66,9 @@ ENV.curl      = true/false
 ENV.jq        = true/false
 ```
 
-### 1.3 Docker Daemon Check (every run)
+### 1.2 Docker Daemon Check
 
-Even with cached env, the Docker daemon might not be running. Always verify:
+Tool detection and Docker daemon status are different checks. Always verify the daemon separately:
 
 ```bash
 docker info 2>/dev/null
@@ -104,7 +81,7 @@ docker info 2>/dev/null
     - Linux: run `curl -fsSL https://get.docker.com | sh`
 - Installed but daemon not running → "Please start Docker Desktop (macOS) or `sudo systemctl start docker` (Linux)."
 
-**git** — if missing (from cache or detection):
+**git** — if missing:
 - `brew install git` (macOS) or `sudo apt install git` (Linux)
 
 ### Optional and Path-Dependent Tools
@@ -528,8 +505,7 @@ Only reach this section after:
 Report to user with a short readiness summary. This is a user-facing status snapshot, not a full artifact dump.
 Keep it focused on the key capabilities and blockers only.
 
-Do **not** add a "full details" section here and do **not** mention `~/.sealos/env.json` in the default output.
-That file is a machine/cache artifact, not a project artifact.
+Do **not** add a "full details" section in the default output.
 
 Recommended format:
 
@@ -539,7 +515,7 @@ Project:
   ✓ git: <BRANCH> ← <GITHUB_URL or "local only">
   ✓ README: <one-line summary of what the project does>
 
-Environment:                      (cached / refreshed)
+Environment:
   ○ Docker <version>         (or: ✗ Docker — local build path currently blocked)
   ✓ git <version>
   ○ Node.js <version>        (or: ✗ Node.js — using AI fallback mode)
@@ -556,7 +532,7 @@ If Docker, `gh`, buildx, or registry connectivity are not ready, report them now
 
 Output rules:
 - Show only the high-signal items a user needs to decide whether to continue
-- Do not print raw JSON, cache metadata, or exhaustive diagnostics in the normal summary
+- Do not print raw command output or exhaustive diagnostics in the normal summary
 - If a capability is missing, explain briefly which later path it blocks
 - Prefer one-line project identification plus compact Environment/Auth sections over long prose
 
