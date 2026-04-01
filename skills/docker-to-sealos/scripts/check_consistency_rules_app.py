@@ -1390,6 +1390,45 @@ def check_automount_service_account_token(context: ScanContext) -> List[Violatio
     )
 
 
+def check_image_pull_secret_refs(context: ScanContext) -> List[Violation]:
+    violations: List[Violation] = []
+
+    for doc in context.yaml_documents:
+        if doc.skip_checks or not is_app_workload_document(doc) or not has_managed_workload_marker(doc.data):
+            continue
+        if not isinstance(doc.data, dict):
+            continue
+
+        template_spec = get_template_spec(doc.data)
+        image_pull_secrets = template_spec.get("imagePullSecrets") if isinstance(template_spec, dict) else None
+
+        referenced_names: List[str] = []
+        if isinstance(image_pull_secrets, list):
+            for item in image_pull_secrets:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name")
+                if isinstance(name, str) and name.strip():
+                    referenced_names.append(name.strip())
+
+        if "${{ defaults.app_name }}" in referenced_names:
+            continue
+
+        add_doc_violation(
+            violations,
+            rule_id="R035",
+            doc=doc,
+            pattern=r"^\s*imagePullSecrets\s*:",
+            default_pattern=r"^\s*template\s*:",
+            message=(
+                "managed app workloads must reference the app-scoped image pull secret "
+                "`${{ defaults.app_name }}` via template.spec.imagePullSecrets"
+            ),
+        )
+
+    return violations
+
+
 APP_RULES: Dict[str, Rule] = {
     "R001": Rule("R001", check_no_latest_tags),
     "R016": Rule("R016", check_no_floating_image_tags),
@@ -1419,4 +1458,5 @@ APP_RULES: Dict[str, Rule] = {
     "R028": Rule("R028", check_container_names_match_workload_name),
     "R009": Rule("R009", check_revision_history_limit),
     "R010": Rule("R010", check_automount_service_account_token),
+    "R035": Rule("R035", check_image_pull_secret_refs),
 }

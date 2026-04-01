@@ -103,11 +103,18 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           image: nginx:1.27.2
           imagePullPolicy: IfNotPresent  # Must be set
 ```
+
+Notes:
+- Always reference the app-scoped image pull Secret `${{ defaults.app_name }}`.
+- `sealos-deploy` should create or refresh that Secret automatically from local `gh` CLI credentials when deploying private GHCR images.
+- Reusable templates should not expose raw registry credential inputs as user-facing form fields.
 
 ## Port Mapping
 
@@ -131,6 +138,8 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           ports:
@@ -242,6 +251,8 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           env:
@@ -358,6 +369,8 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           volumeMounts:

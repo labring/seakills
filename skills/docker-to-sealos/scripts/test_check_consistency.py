@@ -1885,6 +1885,76 @@ class CheckConsistencyTests(unittest.TestCase):
         )
         self.assertFalse(any(item.rule_id == "R007" for item in violations))
 
+    def test_allows_registry_pull_secret_via_image_pull_secrets(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: ${{ defaults.app_name }}
+            type: kubernetes.io/dockerconfigjson
+            data:
+              .dockerconfigjson: e30=
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+              labels:
+                app: demo
+                cloud.sealos.io/app-deploy-manager: demo
+              annotations:
+                originImageName: nginx:1.27.2
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                metadata:
+                  labels:
+                    app: demo
+                spec:
+                  automountServiceAccountToken: false
+                  imagePullSecrets:
+                    - name: ${{ defaults.app_name }}
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id in {"R007", "R035"} for item in violations))
+
+    def test_detects_missing_registry_pull_secret_reference(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+              labels:
+                app: demo
+                cloud.sealos.io/app-deploy-manager: demo
+              annotations:
+                originImageName: nginx:1.27.2
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                metadata:
+                  labels:
+                    app: demo
+                spec:
+                  automountServiceAccountToken: false
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R035" for item in violations))
+
     def test_detects_object_storage_secret_misuse_on_non_s3_env(self):
         violations = self.run_checker(
             """

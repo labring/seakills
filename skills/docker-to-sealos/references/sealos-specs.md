@@ -280,7 +280,7 @@ categories:
 **Sealos does not support emptyDir!** All scenarios requiring temporary storage must be converted to persistent storage.
 
 **Incorrect example:**
-```yaml
+```text
 volumes:
   - name: config-storage
     emptyDir: {}  # Error! Sealos does not support emptyDir
@@ -440,7 +440,6 @@ data:
       host: localhost
       port: 5432
 
----
 # Deployment
 apiVersion: apps/v1
 kind: Deployment
@@ -454,6 +453,8 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           volumeMounts:
@@ -828,10 +829,17 @@ All application Deployments or StatefulSets must include the following configura
 
 1. **automountServiceAccountToken**: Must be set to `false` to avoid unnecessary permission exposure
 2. **revisionHistoryLimit**: Must be set to `1` to reduce resources consumed by historical revisions
-3. **metadata.annotations**: Must include the following annotations:
+3. **imagePullSecrets**: Must reference the app-scoped image pull Secret `${{ defaults.app_name }}`
+4. **metadata.annotations**: Must include the following annotations:
    - `originImageName`: Original image name
    - `deploy.cloud.sealos.io/minReplicas`: Minimum replica count, typically set to `'1'`
    - `deploy.cloud.sealos.io/maxReplicas`: Maximum replica count, typically set to `'1'`
+
+Recommended registry pull Secret model:
+
+- Managed workloads reference `${{ defaults.app_name }}` in `imagePullSecrets`
+- `sealos-deploy` creates or refreshes that Secret automatically from local `gh` CLI credentials when the image is a private GHCR image
+- If the template is deployed outside `sealos-deploy`, the operator must create the Secret manually before applying the workload
 
 ```yaml
 apiVersion: apps/v1
@@ -850,6 +858,8 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false  # Must be set to false
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           # Other container configuration...
@@ -881,6 +891,8 @@ spec:
         app: ${{ defaults.app_name }}
     spec:
       automountServiceAccountToken: false  # Disable automatic service account token mounting
+      imagePullSecrets:
+        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           image: example/app:1.0.0
@@ -995,11 +1007,13 @@ containers:
 containers:
   - name: app
     image: app:1.0.0
+    imagePullPolicy: IfNotPresent
 
 # Incorrect: Only requests
 containers:
   - name: app
     image: app:1.0.0
+    imagePullPolicy: IfNotPresent
     resources:
       requests:
         cpu: 100m
@@ -1009,6 +1023,7 @@ containers:
 containers:
   - name: app
     image: app:1.0.0
+    imagePullPolicy: IfNotPresent
     resources:
       limits:
         cpu: 500m
@@ -1018,6 +1033,7 @@ containers:
 containers:
   - name: app
     image: app:1.0.0
+    imagePullPolicy: IfNotPresent
     resources:
       requests:
         cpu: 100m

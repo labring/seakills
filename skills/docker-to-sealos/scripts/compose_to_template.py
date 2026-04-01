@@ -1872,6 +1872,7 @@ def build_env_entries(
 def build_workload(
     *,
     workload_name: str,
+    pull_secret_name: str,
     image: str,
     ports: Sequence[int],
     env_entries: Sequence[Dict[str, Any]],
@@ -1883,6 +1884,7 @@ def build_workload(
     kind = "StatefulSet" if is_stateful else "Deployment"
     template_spec: Dict[str, Any] = {
         "automountServiceAccountToken": False,
+        "imagePullSecrets": [{"name": pull_secret_name}],
         "containers": [
             {
                 "name": workload_name,
@@ -2124,6 +2126,7 @@ def build_documents(
             app_services = service_items[:1]
 
     db_hosts = {name: DB_FQDN_BY_TYPE[db_type] for name, db_type in db_services.items() if db_type in DB_FQDN_BY_TYPE}
+    pull_secret_name = "${{ defaults.app_name }}"
 
     docs: List[Dict[str, Any]] = []
     docs.append(build_template_resource(meta))
@@ -2173,6 +2176,7 @@ def build_documents(
         probes = build_probe_pair(service, image, ports, command_args)
         workload = build_workload(
             workload_name=workload_name,
+            pull_secret_name=pull_secret_name,
             image=image,
             ports=ports,
             env_entries=env_entries,

@@ -16,7 +16,7 @@
  *   { "success": false, "error": "build failed: ..." }
  */
 
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { validateArtifactData } from './artifact-validator.mjs'
@@ -32,6 +32,14 @@ function getDateTag () {
 
 function run (cmd, opts = {}) {
   return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
+}
+
+function runFile (command, args, opts = {}) {
+  return execFileSync(command, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim()
+}
+
+function sleep (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function hasGhCli () {
@@ -147,6 +155,72 @@ function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
   return { ok: true, registryInfo: ghcr }
 }
 
+function getGhcrPackageVisibility (packageName) {
+  try {
+    return runFile('gh', ['api', `/user/packages/container/${packageName}`, '-q', '.visibility'])
+  } catch {
+    return null
+  }
+}
+
+async function verifyGhcrPublicPull (user, packageName, tag) {
+  const visibility = getGhcrPackageVisibility(packageName)
+  const manifestUrl = `https://ghcr.io/v2/${user}/${packageName}/manifests/${tag}`
+  const acceptHeader = 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json'
+
+  let lastStatus = null
+  let lastError = null
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const tokenResponse = await fetch(`https://ghcr.io/token?scope=repository:${user}/${packageName}:pull`)
+      lastStatus = tokenResponse.status
+
+      if (tokenResponse.ok) {
+        const tokenPayload = await tokenResponse.json()
+        if (tokenPayload.token) {
+          const manifestResponse = await fetch(manifestUrl, {
+            headers: {
+              Authorization: `Bearer ${tokenPayload.token}`,
+              Accept: acceptHeader,
+            },
+          })
+
+          lastStatus = manifestResponse.status
+          if (manifestResponse.ok) {
+            return { ok: true, visibility }
+          }
+
+          if (manifestResponse.status === 401 || manifestResponse.status === 403) {
+            break
+          }
+        }
+      }
+    } catch (error) {
+      lastError = error.message
+    }
+
+    if (attempt < 4) {
+      await sleep(2000)
+    }
+  }
+
+  return { ok: false, visibility, status: lastStatus, error: lastError }
+}
+
+function formatGhcrPullabilityWarning (user, packageName, tag, verification) {
+  const settingsUrl = `https://github.com/users/${user}/packages/container/package/${packageName}/settings`
+  const visibility = verification.visibility || 'unknown'
+  const status = verification.status ? ` GHCR manifest check status: ${verification.status}.` : ''
+  const detail = verification.error ? ` Last check error: ${verification.error}.` : ''
+  return [
+    `Built and pushed ${`ghcr.io/${user}/${packageName}:${tag}`}, but the image is not anonymously pullable from GHCR.`,
+    `Current package visibility: ${visibility}.${status}${detail}`,
+    `This is acceptable when the deploy step creates an image pull secret from local gh CLI credentials.`,
+    `If you want a public image instead, change the package visibility in GitHub Packages: ${settingsUrl}`,
+  ].join(' ')
+}
+
 function detectDockerHub () {
   try {
     const info = run('docker info 2>/dev/null')
@@ -180,7 +254,7 @@ function autoDetectRegistry () {
 
 // ── Build & Push ─────────────────────────────────────────
 
-function buildAndPush (workDir, repoName, registryInfo) {
+async function buildAndPush (workDir, repoName, registryInfo) {
   const tag = getDateTag()
   const sanitized = repoName.toLowerCase().replace(/[^a-z0-9_.-]/g, '-')
   const startedAt = new Date().toISOString()
@@ -211,6 +285,16 @@ function buildAndPush (workDir, repoName, registryInfo) {
       { cwd: workDir, stdio: 'pipe', timeout: 600000 },
     )
 
+    let warning = null
+    let requiresImagePullSecret = false
+    if (registryInfo.registry === 'ghcr') {
+      const pullVerification = await verifyGhcrPublicPull(registryInfo.user, sanitized, tag)
+      if (!pullVerification.ok) {
+        warning = formatGhcrPullabilityWarning(registryInfo.user, sanitized, tag, pullVerification)
+        requiresImagePullSecret = true
+      }
+    }
+
     writeBuildResult(workDir, {
       outcome: 'success',
       registry: registryInfo.registry,
@@ -219,7 +303,12 @@ function buildAndPush (workDir, repoName, registryInfo) {
       finished_at: new Date().toISOString(),
     })
 
-    return { success: true, image: remoteImage, registry: registryInfo.registry }
+    const result = { success: true, image: remoteImage, registry: registryInfo.registry }
+    if (warning) {
+      result.warning = warning
+      result.requires_image_pull_secret = requiresImagePullSecret
+    }
+    return result
   } catch (e) {
     const error = e.stderr?.toString() || e.message
     writeBuildResult(workDir, {
@@ -306,7 +395,7 @@ if (args.registry === 'ghcr') {
   }
 }
 
-const result = buildAndPush(path.resolve(args.workDir), args.repoName, registryInfo)
+const result = await buildAndPush(path.resolve(args.workDir), args.repoName, registryInfo)
 console.log(JSON.stringify(result, null, 2))
 
 if (!result.success) process.exit(1)

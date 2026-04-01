@@ -112,15 +112,25 @@ docker info 2>/dev/null
 **gh CLI (GitHub CLI):**
 - If present and authenticated → enables **zero-interaction GHCR push**
 - `build-push.mjs` auto-detects `gh auth status` and uses `gh auth token` to login to `ghcr.io`
+- GHCR push alone is not enough for Sealos. For private GHCR packages, the deploy step must create an image pull Secret using the local `gh` CLI session.
+- `sealos-deploy` should never ask the user to type registry host/username/password when `gh auth status` is already available locally.
 - Missing `gh` is **not** a universal preflight failure
-- `gh` becomes mandatory only when the selected path needs local build + push to GHCR
+- `gh` becomes mandatory only when the selected image destination is GHCR
 - If `gh` is missing, ask:
   - `Missing gh. Install it now? (y/n)`
   - If user answers `y`:
     - macOS: run `brew install gh`
     - Debian/Ubuntu: run `sudo apt install gh`
 - Do not trigger `gh auth login` during environment detection
-- Only trigger `gh auth login` later if the run actually reaches a GHCR push path
+- Only trigger `gh auth login` later if the run actually reaches a GHCR push path chosen by the user
+
+**Docker Hub login session:**
+- Needed only when the selected image destination is Docker Hub
+- Docker Hub path assumes the pushed image will be public at deploy time
+- Private Docker Hub images are out of scope for `sealos-deploy` pull-secret automation
+- `docker login` may need to be run manually by the user in another terminal
+- Do not treat a missing Docker Hub login as a universal preflight blocker
+- Ask for the registry destination later in Phase 4, then enforce the matching login path
 
 **Node.js:**
 - If missing, no problem. Pipeline uses fallback mode:
@@ -515,7 +525,13 @@ Only reach this section after:
 - Step 4 auth/workspace checks passed
 - And only then Step 3 project context was collected
 
-Report to user:
+Report to user with a short readiness summary. This is a user-facing status snapshot, not a full artifact dump.
+Keep it focused on the key capabilities and blockers only.
+
+Do **not** add a "full details" section here and do **not** mention `~/.sealos/env.json` in the default output.
+That file is a machine/cache artifact, not a project artifact.
+
+Recommended format:
 
 ```
 Project:
@@ -537,5 +553,11 @@ Auth:
 ```
 
 If Docker, `gh`, buildx, or registry connectivity are not ready, report them now as path-specific warnings. Only upgrade them to hard blockers if Phase 2/3 confirms that local build/push is required.
+
+Output rules:
+- Show only the high-signal items a user needs to decide whether to continue
+- Do not print raw JSON, cache metadata, or exhaustive diagnostics in the normal summary
+- If a capability is missing, explain briefly which later path it blocks
+- Prefer one-line project identification plus compact Environment/Auth sections over long prose
 
 Record `ENV` and `PROJECT` for subsequent phases → proceed to `modules/pipeline.md`.
