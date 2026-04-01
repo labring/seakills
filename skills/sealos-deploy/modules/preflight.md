@@ -282,8 +282,7 @@ Before auth, let the user choose which Sealos Cloud region to deploy to.
 
 Read the default region and available regions from config:
 ```bash
-SKILL_CONFIG=$(cat "<SKILL_DIR>/config.json")
-DEFAULT_REGION=$(echo "$SKILL_CONFIG" | grep -o '"default_region":"[^"]*"' | cut -d'"' -f4)
+DEFAULT_REGION=$(jq -r '.default_region' "<SKILL_DIR>/config.json")
 ```
 
 **Always ask the user to confirm or choose a region.** Present the regions from `config.json` and allow custom input:
@@ -303,7 +302,7 @@ The region list comes from `config.json` `regions` array. If `regions` is not pr
 
 If the user has an existing `~/.sealos/auth.json`, read the previously used region and offer it as an option:
 ```bash
-PREV_REGION=$(cat ~/.sealos/auth.json 2>/dev/null | grep -o '"region":"[^"]*"' | cut -d'"' -f4)
+PREV_REGION=$(jq -r '.region // empty' ~/.sealos/auth.json 2>/dev/null)
 ```
 
 If `PREV_REGION` exists and differs from `DEFAULT_REGION`, include it in the choices.
@@ -367,9 +366,8 @@ Stdout outputs JSON result: `{ "kubeconfig_path": "...", "region": "...", "works
 First, read constants from `<SKILL_DIR>/config.json`:
 ```bash
 # Read skill constants (client_id, default_region)
-SKILL_CONFIG=$(cat "<SKILL_DIR>/config.json")
-CLIENT_ID=$(echo "$SKILL_CONFIG" | grep -o '"client_id":"[^"]*"' | cut -d'"' -f4)
-DEFAULT_REGION=$(echo "$SKILL_CONFIG" | grep -o '"default_region":"[^"]*"' | cut -d'"' -f4)
+CLIENT_ID=$(jq -r '.client_id' "<SKILL_DIR>/config.json")
+DEFAULT_REGION=$(jq -r '.default_region' "<SKILL_DIR>/config.json")
 ```
 
 Step 1 — Request device authorization:
