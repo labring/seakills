@@ -791,14 +791,17 @@ Configuration is applied directly to `.sealos/template/index.yaml`. No separate 
 The template deploy API uses a fixed `template.` subdomain prefix on the region domain:
 
 ```
-Region:     https://<region-domain>
-Deploy URL: https://template.<region-domain>/api/v2alpha/templates/raw
+Region example:     https://gzg.sealos.run
+Deploy URL example: https://template.gzg.sealos.run/api/v2alpha/templates/raw
 ```
+
+Do not send requests to the literal placeholder form `https://template.<region-domain>/...`.
+Always derive `REGION_DOMAIN` first, then build `DEPLOY_URL` from the real value.
 
 Extract the region from `~/.sealos/auth.json` (saved during preflight auth):
 ```bash
-REGION=$(cat ~/.sealos/auth.json | grep -o '"region":"[^"]*"' | cut -d'"' -f4)
-REGION_DOMAIN=$(echo "$REGION" | sed 's|https://||')
+REGION=$(jq -r '.region' ~/.sealos/auth.json)
+REGION_DOMAIN=$(printf '%s' "$REGION" | sed -E 's#^https?://##; s#/$##')
 DEPLOY_URL="https://template.${REGION_DOMAIN}/api/v2alpha/templates/raw"
 ```
 
@@ -811,28 +814,17 @@ Request body fields:
 - `args` (optional) — template variable key-value pairs that override or supply `spec.inputs` fields. Values from Phase 5.5 `CONFIG.args`.
 - `dryRun` (optional, boolean) — if true, validates resources against K8s API without creating anything. Returns 200 with preview.
 
-**With Node.js:**
+**With Node.js (preferred):**
 ```bash
-node -e "
-const fs = require('fs');
-const os = require('os');
-const kc = fs.readFileSync(os.homedir() + '/.sealos/kubeconfig', 'utf-8');
-const yaml = fs.readFileSync('.sealos/template/index.yaml', 'utf-8');
-// CONFIG.args from Phase 5.5
-const args = { ADMIN_EMAIL: 'user@example.com' };
-fetch('$DEPLOY_URL', {
-  method: 'POST',
-  headers: {
-    'Authorization': encodeURIComponent(kc),
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({ yaml, args })
-})
-.then(r => { console.log('Status:', r.status); return r.json(); })
-.then(d => console.log(JSON.stringify(d, null, 2)))
-.catch(e => console.error(e));
-"
+node "<SKILL_DIR>/scripts/deploy-template.mjs" ".sealos/template/index.yaml" --dry-run
+node "<SKILL_DIR>/scripts/deploy-template.mjs" ".sealos/template/index.yaml" --args-json '{"ADMIN_EMAIL":"user@example.com"}'
 ```
+
+This script is the preferred execution path because it:
+- reads `~/.sealos/auth.json` directly instead of fragile shell parsing
+- derives `REGION_DOMAIN` from the real `region` value
+- always posts to the concrete `DEPLOY_URL`
+- emits structured JSON on success or failure
 
 **Without Node.js (curl fallback):**
 ```bash
@@ -910,7 +902,7 @@ If the Template API returns 503/500 or is unreachable, deploy directly via kubec
 NAMESPACE=$(KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify config view --minify -o jsonpath='{.contexts[0].context.namespace}')
 
 # Cluster domain (from region URL)
-CLOUD_DOMAIN=$(cat ~/.sealos/auth.json | grep -o '"region":"[^"]*"' | cut -d'"' -f4 | sed 's|https://||')
+CLOUD_DOMAIN=$(jq -r '.region' ~/.sealos/auth.json | sed -E 's#^https?://##; s#/$##')
 
 # TLS secret name (from existing ingress, or default)
 CERT_SECRET=$(KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify get ingress -n "$NAMESPACE" -o jsonpath='{.items[0].spec.tls[0].secretName}' 2>/dev/null || echo "wildcard-cert")
