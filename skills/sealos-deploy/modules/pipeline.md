@@ -480,9 +480,32 @@ gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
 REGISTRY=ghcr
 ```
 Important:
+- Before the first GHCR push, ensure the local `gh` session has `write:packages`.
+- For GHCR, `write:packages` is sufficient for both pushing and later creating the app-scoped image pull Secret. GitHub CLI may not show a separate `read:packages` entry even though pull access works.
+- If the current session is missing GHCR package access, refresh with:
+  `node "<SKILL_DIR>/scripts/gh-refresh-scopes.mjs" write:packages`
+- When `build-push.mjs` or `ensure-image-pull-secret.mjs` runs inside a TTY, it will now ask once whether it should refresh missing GHCR scopes and, on `y`, run `gh auth refresh` in the same PTY before continuing.
+- If `gh auth refresh` exits successfully but the scopes are still missing, the script will immediately fall back to a full `gh auth login --web --scopes ...` in the same PTY and only continue after re-checking the scopes.
 - A successful GHCR push does **not** guarantee Sealos can pull the image.
 - For private GHCR packages, keep the deployment path GHCR-first and create an image pull Secret from the local `gh` CLI session before applying or updating workloads.
 - Do **not** surface raw registry host/username/password/email as user-facing template inputs when local `gh auth status` is already available.
+
+If `build-push.mjs` or `ensure-image-pull-secret.mjs` returns:
+```json
+{
+  "action": "gh_scope_refresh_required",
+  "tty_required": true,
+  "suggested_command": "node <SKILL_DIR>/scripts/gh-refresh-scopes.mjs write:packages"
+}
+```
+then the agent should:
+1. Ask the user once: `Missing GitHub Packages permission for GHCR. Refresh now? (y/n)`
+2. If the current script is already running in a PTY, answer `y` there and let it continue in-place
+3. Otherwise run the `suggested_command` in the **current PTY/TTY session**
+4. If `gh` prompts `Press Enter to open github.com in your browser...`, send `Enter` in the same PTY
+5. After the refresh command exits successfully, retry the exact failed command automatically
+
+Do not tell the user to open a separate terminal when the current agent session can run a PTY command.
 
 If `gh` is installed but not authenticated, explicitly tell the user that GHCR push requires GitHub CLI login, then trigger:
 ```bash

@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
-import { execFileSync, execSync } from 'child_process'
-
-function run (cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
-}
+import { execFileSync } from 'child_process'
+import { ensureGhScopesWithPrompt, run } from './gh-auth-utils.mjs'
 
 function runFile (command, args, opts = {}) {
   return execFileSync(command, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim()
@@ -32,12 +29,11 @@ function parseImageRegistry (imageRef) {
   return 'docker.io'
 }
 
-function ensureGhAuth () {
-  try {
-    run('gh auth status')
-  } catch {
-    throw new Error('gh CLI is not authenticated. Run: gh auth login')
-  }
+async function ensureGhAuth () {
+  return ensureGhScopesWithPrompt(
+    ['write:packages'],
+    'GHCR image pull secret creation',
+  )
 }
 
 function ensureKubectl () {
@@ -139,7 +135,14 @@ try {
     process.exit(0)
   }
 
-  ensureGhAuth()
+  const authCheck = await ensureGhAuth()
+  if (!authCheck.ok) {
+    console.log(JSON.stringify({
+      success: false,
+      ...authCheck,
+    }, null, 2))
+    process.exit(1)
+  }
   ensureKubectl()
 
   const username = run('gh api user -q .login')
@@ -169,9 +172,10 @@ try {
     deployment,
   }, null, 2))
 } catch (error) {
+  const structured = error && typeof error === 'object' && 'error' in error
   console.log(JSON.stringify({
     success: false,
-    error: error.message,
+    ...(structured ? error : { error: error.message }),
   }, null, 2))
   process.exit(1)
 }
