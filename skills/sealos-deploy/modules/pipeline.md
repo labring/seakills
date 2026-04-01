@@ -480,6 +480,9 @@ gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
 REGISTRY=ghcr
 ```
 Important:
+- Before the first GHCR push, ensure the local `gh` session has both `read:packages` and `write:packages`.
+- Request them together in one refresh so the same token can both push the image and later back the app-scoped image pull Secret:
+  `gh auth refresh -h github.com -s read:packages,write:packages`
 - A successful GHCR push does **not** guarantee Sealos can pull the image.
 - For private GHCR packages, keep the deployment path GHCR-first and create an image pull Secret from the local `gh` CLI session before applying or updating workloads.
 - Do **not** surface raw registry host/username/password/email as user-facing template inputs when local `gh auth status` is already available.

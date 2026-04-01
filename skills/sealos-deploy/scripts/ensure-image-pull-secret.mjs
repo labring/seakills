@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
-import { execFileSync, execSync } from 'child_process'
-
-function run (cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
-}
+import { execFileSync } from 'child_process'
+import { ensureGhScopes, run } from './gh-auth-utils.mjs'
 
 function runFile (command, args, opts = {}) {
   return execFileSync(command, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim()
@@ -33,10 +30,9 @@ function parseImageRegistry (imageRef) {
 }
 
 function ensureGhAuth () {
-  try {
-    run('gh auth status')
-  } catch {
-    throw new Error('gh CLI is not authenticated. Run: gh auth login')
+  const scopeCheck = ensureGhScopes(['read:packages'], 'GHCR image pull secret creation')
+  if (!scopeCheck.ok) {
+    throw new Error(scopeCheck.error)
   }
 }
 

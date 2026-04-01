@@ -20,6 +20,7 @@ import { execFileSync, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { validateArtifactData } from './artifact-validator.mjs'
+import { ensureGhScopes, hasGhCli, run } from './gh-auth-utils.mjs'
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -30,25 +31,12 @@ function getDateTag () {
   return `${date}-${time}`
 }
 
-function run (cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', ...opts }).trim()
-}
-
 function runFile (command, args, opts = {}) {
   return execFileSync(command, args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim()
 }
 
 function sleep (ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-function hasGhCli () {
-  try {
-    run('gh --version')
-    return true
-  } catch {
-    return false
-  }
 }
 
 function ensureBuildDir (workDir) {
@@ -124,6 +112,8 @@ function loginGhcr (user) {
 }
 
 function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
+  const requiredScopes = ['read:packages', 'write:packages']
+
   if (!hasGhCli()) {
     return {
       ok: false,
@@ -143,6 +133,11 @@ function ensureGhcrRegistry ({ triggerLogin = false } = {}) {
       ok: false,
       error: 'gh CLI not authenticated. Run: gh auth login',
     }
+  }
+
+  const scopeCheck = ensureGhScopes(requiredScopes, 'GHCR push and later private-image deploy')
+  if (!scopeCheck.ok) {
+    return scopeCheck
   }
 
   if (!loginGhcr(ghcr.user)) {
