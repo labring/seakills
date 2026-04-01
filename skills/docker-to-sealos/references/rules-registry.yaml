@@ -65,7 +65,7 @@ rules:
     description: All containers must explicitly set imagePullPolicy to IfNotPresent.
     severity: error
   - id: R007
-    description: Secret usage must follow approved database/object-storage policy, and Kubeblocks reserved database secret names must not be overridden.
+    description: Env/volume Secret usage must follow approved database/object-storage policy, and Kubeblocks reserved database secret names must not be overridden.
     severity: error
   - id: R017
     description: Database connection env fields (endpoint/host/port/username/password) in business workloads must use approved Kubeblocks database secretKeyRef entries, or (for endpoint/URL fields) compose values only from env vars sourced from approved DB secretKeyRef keys.
@@ -105,6 +105,9 @@ rules:
     severity: error
   - id: R010
     description: Managed app workloads must explicitly set automountServiceAccountToken to false.
+    severity: error
+  - id: R035
+    description: Managed app workloads must reference the app-scoped image pull secret name via template.spec.imagePullSecrets.
     severity: error
   - id: R011
     description: All PVC storage requests must be concrete values and less than or equal to 1Gi.

@@ -120,6 +120,14 @@ must_rules:
     enforcement:
       type: rule
       target: R015
+  - must: "Managed app workloads must reference the app-scoped image pull Secret `${{ defaults.app_name }}` via `template.spec.imagePullSecrets`."
+    enforcement:
+      type: rule
+      target: R035
+  - must: "The registry pull Secret is runtime-managed by `sealos-deploy` using local `gh` CLI credentials for private GHCR images; do not expose raw registry credential inputs in generated templates."
+    enforcement:
+      type: manual
+      note: "Requires deploy-path behavior that cannot be validated from static template snippets alone."
   - must: "All containers must explicitly set `imagePullPolicy: IfNotPresent`."
     enforcement:
       type: rule
@@ -148,10 +156,14 @@ must_rules:
     enforcement:
       type: rule
       target: R017
-  - must: "Business containers must not use custom `Secret` or `secretKeyRef` except approved Kubeblocks database secrets and object storage secrets."
+  - must: "Business containers must not use custom env/volume `Secret` references except approved Kubeblocks database secrets and object storage secrets."
     enforcement:
       type: rule
       target: R007
+  - must: "A dedicated app-scoped registry pull Secret is allowed and should be referenced only through `template.spec.imagePullSecrets`."
+    enforcement:
+      type: rule
+      target: R035
   - must: "Database connection/bootstrap may use Kubeblocks-provided secrets, and reserved Kubeblocks database secret names must not be redefined by custom `Secret` resources."
     enforcement:
       type: rule
@@ -164,6 +176,10 @@ must_rules:
     enforcement:
       type: manual
       note: "Requires per-application canonical env dictionary from upstream docs."
+  - must: "When the application requires its public URL configured via a file-based config system (e.g., node-config `config/default.json`, PHP config files), create a ConfigMap containing the config file with the public URL set to `https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}`, and mount it to the application's config directory. The ConfigMap must follow standard naming and label conventions."
+    enforcement:
+      type: manual
+      note: "Requires runtime-config detection plus path-aware ConfigMap mount validation."
   - must: "For PostgreSQL custom databases (non-`postgres`), include `${{ defaults.app_name }}-pg-init` Job and implement startup-safe/idempotent creation logic (readiness wait + existence check before create)."
     enforcement:
       type: rule

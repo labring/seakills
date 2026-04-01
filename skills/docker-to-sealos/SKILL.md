@@ -49,7 +49,7 @@ Generate resources in this order:
 1. Template CR
 2. ObjectStorageBucket (if needed)
 3. Database resources (ServiceAccount → Role → RoleBinding → Cluster → Job if needed)
-4. App workload resources (ConfigMap → Deployment/StatefulSet → Service → Ingress)
+4. App workload resources (ConfigMap/Secret → Deployment/StatefulSet → Service → Ingress)
 5. App resource (last)
 
 ### Step 4: Apply conversion rules
@@ -129,6 +129,8 @@ If validation fails, fix template/rules/examples first.
 - Avoid floating tags (for example `:v2`, `:2.1`, `:stable`); use an explicit version tag or digest.
 - Managed workload image references must be concrete and must not contain Compose-style variable expressions (for example `${VAR}`, `${VAR:-default}`); resolve to explicit tag or digest before emitting template artifacts.
 - Application `originImageName` must match container image.
+- Managed app workloads must reference the app-scoped image pull Secret `${{ defaults.app_name }}` via `template.spec.imagePullSecrets`.
+- The registry pull Secret is runtime-managed by `sealos-deploy` using local `gh` CLI credentials for private GHCR images; do not expose raw registry credential inputs in generated templates.
 - All containers must explicitly set `imagePullPolicy: IfNotPresent`.
 
 ### Storage
@@ -142,7 +144,8 @@ If validation fails, fix template/rules/examples first.
 
 - Non-database sensitive values/inputs use direct `env[].value`.
 - Business containers must source database connection fields (`endpoint`, `host`, `port`, `username`, `password`) from approved Kubeblocks database secrets via `env[].valueFrom.secretKeyRef`.
-- Business containers must not use custom `Secret` or `secretKeyRef` except approved Kubeblocks database secrets and object storage secrets.
+- Business containers must not use custom env/volume `Secret` references except approved Kubeblocks database secrets and object storage secrets.
+- A dedicated app-scoped registry pull Secret is allowed and should be referenced only through `template.spec.imagePullSecrets`.
 - Database connection/bootstrap may use Kubeblocks-provided secrets, and reserved Kubeblocks database secret names must not be redefined by custom `Secret` resources.
 - Env vars must be declared before referenced (for example password before URL composition).
 - Follow official app env var naming; do not invent prefixes.

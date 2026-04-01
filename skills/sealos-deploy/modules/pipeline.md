@@ -282,6 +282,32 @@ If `.sealos/config.json` exists, apply user overrides: e.g., if `config.json` ha
 
 The `image_ref` field is set to `null` initially. It will be filled in Phase 2 (if existing image found) or Phase 4 (after build).
 
+### Present Analysis Summary
+
+After writing `.sealos/analysis.json`, present a concise repository analysis summary to the user.
+This summary should expose only the key conclusions, not the full artifact contents.
+
+Recommended format:
+
+```text
+Repository Analysis:
+  - Type: <web app | api | worker | cli | library>
+  - Language: <language>
+  - Framework: <framework or "none detected">
+  - Port: <port or "not detected">
+  - Database: <postgres/mysql/redis/... or "none detected">
+  - Dockerfile: <yes/no>
+  - Score: <N>/12 (<verdict>)
+  - Decision: <continue | stop>
+```
+
+Output rules:
+- Keep the summary short and decision-oriented
+- Do not dump the full `env_vars` object or dimension-by-dimension internals unless the user asks
+- Do not add a default "full details" block after this summary
+- If the assessment stops the pipeline, briefly state the top blocker(s)
+- If the assessment continues, state the next phase in one short line
+
 ---
 
 ## Phase 2: Detect Existing Image
@@ -420,14 +446,30 @@ __pycache__
 
 ## Phase 4: Build & Push
 
-### 4.0 Registry Auth (auto-select — lazy, only checked here)
+### 4.0 Choose Image Destination
 
-Registry login is deferred to this phase because it's only needed when building.
+Registry selection is deferred to this phase because it's only needed when building.
 If Phase 2 found an existing image, this phase is skipped entirely.
 
-**Priority order (fully automatic when gh CLI is present):**
+Before any login step, tell the user:
 
-**1. GHCR via gh CLI (preferred):**
+```text
+This app will be built locally with Docker.
+Choose where to push the image:
+
+  1. GHCR (recommended) — agent can run `gh auth login` and finish browser auth with you
+  2. Docker Hub — public images only; use your existing `docker login` session, or run `docker login` in another terminal
+```
+
+Default to **GHCR** when the user says "either is fine".
+
+Important:
+- This choice is about the image registry only. Local builds still require Docker either way.
+- If the user chooses GHCR, use `gh auth login` as the preferred interactive auth path.
+- If the user chooses Docker Hub, treat that path as public-image only.
+- If the user chooses Docker Hub and there is no active Docker Hub session, stop and ask the user to run `docker login` in another terminal before continuing.
+
+**If the user chooses GHCR:**
 ```bash
 gh auth status 2>/dev/null
 ```
@@ -437,33 +479,34 @@ GH_USER=$(gh api user -q .login)
 gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
 REGISTRY=ghcr
 ```
+Important:
+- A successful GHCR push does **not** guarantee Sealos can pull the image.
+- For private GHCR packages, keep the deployment path GHCR-first and create an image pull Secret from the local `gh` CLI session before applying or updating workloads.
+- Do **not** surface raw registry host/username/password/email as user-facing template inputs when local `gh auth status` is already available.
+
 If `gh` is installed but not authenticated, explicitly tell the user that GHCR push requires GitHub CLI login, then trigger:
 ```bash
 gh auth login
 ```
 After successful login, retry GHCR authentication and continue.
 
-**2. Docker Hub (fallback — only when gh CLI is unavailable):**
+**If the user chooses Docker Hub:**
 ```bash
 docker info 2>/dev/null | grep "Username:"
 ```
-If `gh` is not installed and a Docker Hub session exists, use it:
+If a Docker Hub session exists, use it:
 ```bash
 DOCKER_HUB_USER=<extracted username>
 REGISTRY=dockerhub
 ```
 
-**3. Nothing available — guide user:**
-Recommend gh CLI (easiest path):
+Treat this path as **public image only**.
+Do not add Docker Hub private-image credential prompts or Docker Hub pull-secret automation in `sealos-deploy`.
+
+If no Docker Hub session exists, tell the user:
 ```
-No container registry available.
-
-Recommended: install GitHub CLI for GHCR push:
-  brew install gh && gh auth login    # macOS
-  sudo apt install gh && gh auth login # Linux
-
-Alternative: log in to Docker Hub manually:
-  docker login
+Docker Hub push requires a local Docker Hub login session.
+Please run `docker login` in another terminal, then continue this deploy.
 ```
 
 ### 4.1 Build & Push
@@ -478,37 +521,50 @@ mkdir -p "$WORK_DIR/.sealos/build"
 
 **If Node.js available:**
 ```bash
-node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>"
-```
-The script auto-detects the registry (GHCR > Docker Hub). To force a specific registry:
-```bash
 node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry ghcr
 node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry dockerhub --user "<user>"
 ```
+Run the command that matches the user's chosen destination:
+- GHCR: `node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry ghcr`
+- Docker Hub: `node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "<repo-name>" --registry dockerhub`
+
 Output: `{ "success": true, "image": "...", "registry": "ghcr" }` or `{ "success": false, "error": "..." }`
+
+For GHCR success, record whether the image is anonymously pullable. If Phase 4 built a GHCR image and it is still private, continue with the GHCR image and let Phase 6 create/update the pull Secret automatically from `gh auth token`.
+If Phase 2 reused an existing public image, do **not** trigger the GHCR pull-secret flow.
 
 **If Node.js not available (fallback — run docker directly):**
 ```bash
 TAG=$(date +%Y%m%d-%H%M%S)
+```
 
-# GHCR path (if gh CLI available)
-if gh auth status 2>/dev/null; then
-  GH_USER=$(gh api user -q .login)
-  gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
-  IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"
-elif command -v gh >/dev/null 2>&1; then
-  echo "gh CLI is installed but not authenticated. Starting gh auth login..."
-  gh auth login
-  GH_USER=$(gh api user -q .login)
-  gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
-  IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"
-else
-  # Docker Hub fallback
-  IMAGE="<DOCKER_HUB_USER>/<repo-name>:$TAG"
-fi
-
+If the user chose GHCR:
+```bash
+GH_USER=$(gh api user -q .login)
+gh auth token | docker login ghcr.io -u "$GH_USER" --password-stdin
+IMAGE="ghcr.io/$GH_USER/<repo-name>:$TAG"
 docker buildx build --platform linux/amd64 -t "$IMAGE" --push -f Dockerfile "$WORK_DIR"
 ```
+
+If the user chose Docker Hub:
+```bash
+DOCKER_HUB_USER=$(docker info 2>/dev/null | sed -n 's/^ Username: //p')
+IMAGE="$DOCKER_HUB_USER/<repo-name>:$TAG"
+docker buildx build --platform linux/amd64 -t "$IMAGE" --push -f Dockerfile "$WORK_DIR"
+```
+
+If `$IMAGE` is a GHCR image, immediately verify it is anonymously pullable before proceeding:
+
+```bash
+TOKEN=$(curl -fsSL "https://ghcr.io/token?scope=repository:$GH_USER/<repo-name>:pull" | sed -n 's/.*"token":"\\([^"]*\\)".*/\\1/p')
+curl -fsSLI \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+  "https://ghcr.io/v2/$GH_USER/<repo-name>/manifests/$TAG"
+```
+
+If that check returns 401/403 or the package visibility is still private, continue with the build but mark that Phase 6 must create/update the namespace image pull Secret before rollout.
+If the run is using an existing public image instead of a new local build, skip this secret-creation path.
 
 ### 4.2 Error Handling
 
@@ -590,6 +646,7 @@ After generating the base template, check if the app needs its public URL config
 - `imagePullPolicy: IfNotPresent`
 - `revisionHistoryLimit: 1`
 - `automountServiceAccountToken: false`
+- `template.spec.imagePullSecrets: [{ name: ${{ defaults.app_name }} }]` for managed workloads
 - **App CRD** (last resource): only `spec.data.url`, `spec.displayType`, `spec.icon`, `spec.name`, `spec.type` — no other fields (no `menuData`, `nameColor`, `template`, etc.)
 - **App CRD fixed enums**: `spec.displayType` must be `normal`; `spec.type` must be `link`
 
@@ -1045,15 +1102,17 @@ What would you like to update?
 
 ### Option 1: Rebuild
 
-Reuse the **exact same build logic as Phase 4** — same Dockerfile, same build-push.mjs or fallback.
+Reuse the **exact same build logic as Phase 4** — same Dockerfile, same explicit registry choice, same build-push.mjs or fallback.
+Default to the registry used by `CURRENT_IMAGE`, but let the user switch if they want.
 
 ```bash
 # With Node.js:
-node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "$DOCKER_HUB_USER" "$REPO_NAME"
+node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "$REPO_NAME" --registry ghcr
+node "<SKILL_DIR>/scripts/build-push.mjs" "$WORK_DIR" "$REPO_NAME" --registry dockerhub
 
 # Without Node.js:
 TAG=$(date +%Y%m%d-%H%M%S)
-NEW_IMAGE="$DOCKER_HUB_USER/$REPO_NAME:$TAG"
+NEW_IMAGE="<selected-user>/$REPO_NAME:$TAG"
 docker buildx build --platform linux/amd64 -t "$NEW_IMAGE" --push -f Dockerfile "$WORK_DIR"
 ```
 
@@ -1075,6 +1134,12 @@ Will trigger a rollout restart in Phase U2.
 ## Phase U2: Apply Update
 
 ### Image update (Option 1 — new image built):
+
+If `NEW_IMAGE` starts with `ghcr.io/`, create or refresh the app-scoped pull Secret and make sure the existing Deployment references it before swapping images:
+
+```bash
+node "<SKILL_DIR>/scripts/ensure-image-pull-secret.mjs" "$NAMESPACE" "$APP_NAME" "$NEW_IMAGE" "$APP_NAME"
+```
 
 ```bash
 KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
@@ -1213,3 +1278,35 @@ Every update (successful or failed) appends an entry to `history` in `.sealos/st
 - **Initial deploy counts** — the first entry should be `action: "deploy"` written by Phase 6 checkpoint.
 - **Failed updates count** — record failures so the user can see what was attempted and why it didn't work.
 - **Keep it bounded** — if history exceeds 50 entries, trim the oldest entries (keep the first `deploy` entry and the most recent 49).
+### 6.1.5 Ensure Image Pull Secret (locally built private GHCR path only)
+
+Before calling the Template API or `kubectl apply`, check whether this run actually passed through Phase 4 local build and push.
+This step is only for cases where:
+- Phase 4 built a new GHCR image locally with Docker
+- That GHCR image is not anonymously pullable
+
+Do **not** run this step when:
+- Phase 2 reused an existing public image
+- The selected registry was Docker Hub public image flow
+
+The template itself should reference the app-scoped pull Secret name via:
+
+```yaml
+imagePullSecrets:
+  - name: ${{ defaults.app_name }}
+```
+
+If the run meets the locally built private-GHCR conditions above, create or update the app-scoped pull Secret in the target namespace using the local `gh` CLI session:
+
+```bash
+node "<SKILL_DIR>/scripts/ensure-image-pull-secret.mjs" "$NAMESPACE" "$APP_NAME" "$IMAGE_REF"
+```
+
+Behavior:
+- Uses `gh api user -q .login` and `gh auth token`
+- Creates/updates a `docker-registry` Secret named exactly like the app (`$APP_NAME`)
+- When a deployment name is provided, also patches `spec.template.spec.imagePullSecrets` to include that app-scoped Secret
+- Keeps registry credentials out of the generated template inputs
+- Do not call it for existing public images
+
+This step should run for both fresh deploys and in-place updates before rollout, but only on the locally built private-GHCR path.

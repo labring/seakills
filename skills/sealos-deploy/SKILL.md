@@ -78,15 +78,16 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Deploy started" > "$LOG_FILE"
 [2026-03-05 14:30:08] === Phase 4: Build & Push ===
 [2026-03-05 14:30:08] Registry: ghcr (auto-detected via gh CLI)
 [2026-03-05 14:30:30] Build: ✓ ghcr.io/zhujingyang/repo:20260305-143022
-[2026-03-05 14:30:30] IMAGE_REF=ghcr.io/zhujingyang/repo:20260305-143022
+[2026-03-05 14:30:32] GHCR pullability: private package detected — deploy will auto-create image pull Secret from gh CLI
+[2026-03-05 14:30:33] IMAGE_REF=ghcr.io/zhujingyang/repo:20260305-143022
 
-[2026-03-05 14:30:31] === Phase 5: Template ===
-[2026-03-05 14:30:32] Output: .sealos/template/index.yaml
+[2026-03-05 14:30:34] === Phase 5: Template ===
+[2026-03-05 14:30:35] Output: .sealos/template/index.yaml
 
-[2026-03-05 14:30:33] === Phase 6: Deploy ===
-[2026-03-05 14:30:33] Deploy URL: https://template.<REGION_DOMAIN>/api/v2alpha/templates/raw
-[2026-03-05 14:30:35] Status: 201 — deployed successfully
-[2026-03-05 14:30:35] === DONE ===
+[2026-03-05 14:30:36] === Phase 6: Deploy ===
+[2026-03-05 14:30:36] Deploy URL: https://template.<REGION_DOMAIN>/api/v2alpha/templates/raw
+[2026-03-05 14:30:38] Status: 201 — deployed successfully
+[2026-03-05 14:30:38] === DONE ===
 ```
 
 **On error**, log the error details before stopping:
@@ -111,7 +112,8 @@ Located in `scripts/` within this skill directory (`<SKILL_DIR>/scripts/`):
 | `score-model.mjs` | `node score-model.mjs <repo-dir>` | Deterministic readiness scoring (0-12) |
 | `validate-artifacts.mjs` | `node validate-artifacts.mjs --dir <work-dir>` | Validate `.sealos` JSON artifacts against enforced schemas |
 | `detect-image.mjs` | `node detect-image.mjs <github-url> [work-dir]` or `node detect-image.mjs <work-dir>` | Detect existing Docker/GHCR images |
-| `build-push.mjs` | `node build-push.mjs <work-dir> <repo> [--registry ghcr\|dockerhub] [--user <user>]` | Build amd64 image & push (GHCR preferred, Docker Hub fallback) |
+| `build-push.mjs` | `node build-push.mjs <work-dir> <repo> [--registry ghcr\|dockerhub] [--user <user>]` | Build amd64 image & push to the selected registry (Docker Hub path assumes a public image at deploy time; omitting `--registry` keeps auto-detect behavior) |
+| `ensure-image-pull-secret.mjs` | `node ensure-image-pull-secret.mjs <namespace> <secret-name> <image-ref> [deployment-name]` | Create/update app-scoped GHCR pull Secret and optionally patch an existing Deployment to reference it |
 | `sealos-auth.mjs` | `node sealos-auth.mjs check\|login\|list\|switch` | Sealos Cloud authentication & workspace switching |
 
 All scripts output JSON. Run via Bash and parse the result.

@@ -40,6 +40,35 @@ This document captures patterns and solutions from actual Sealos deployment expe
 
 ## Consolidated Patterns
 
+### GHCR Push Succeeds but Cluster Pull Fails (Prevents `ImagePullBackOff`)
+
+```yaml
+detection:
+  trigger:
+    - "Phase 4 built a ghcr.io/<user>/<repo>:<tag> image locally"
+    - "Deployment later stalls with ImagePullBackOff or ErrImagePull"
+  root_causes:
+    - "GitHub Container Registry package visibility is still private"
+    - "Cluster has no imagePullSecret for ghcr.io"
+
+decision:
+  if_local_gh_cli_is_available:
+    require: "create or refresh the namespace image pull Secret automatically before deploy/update"
+  else:
+    fallback: "package must be public, or the operator must provide registry pull credentials another way"
+  skip_when:
+    - "Phase 2 reused an existing public image"
+
+verification:
+  visibility_check: "gh api /user/packages/container/<repo> -q .visibility"
+  anonymous_pull_check: "GET ghcr token, then HEAD/GET manifest from ghcr.io/v2/.../manifests/<tag>"
+
+fixes:
+  preferred: "create/update the app-scoped imagePullSecret from gh auth token during deploy"
+  fallback_1: "make the GHCR package public"
+  fallback_2: "push to Docker Hub instead"
+```
+
 ### Public URL Misconfiguration (Prevents Runtime API Failures)
 
 ```yaml
