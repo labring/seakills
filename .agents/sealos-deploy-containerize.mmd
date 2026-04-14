@@ -1,0 +1,40 @@
+flowchart TD
+    A["User runs /sealos-deploy<br/>Input: GitHub URL, local path, or current project"]
+
+    subgraph P0["Phase 0 - Preflight"]
+        P01["Check basic local tools needed for analysis only<br/>git, node, python, curl, jq"]
+        P02["Resolve WORK_DIR, clone if needed,<br/>detect git metadata, read README"]
+        P03["Do not require Sealos auth,<br/>region switch, workspace switch, namespace switch"]
+        P04["Do not require Docker daemon,<br/>gh auth, kubectl, kubeconfig"]
+        P05["Ready summary<br/>Record project context"]
+    end
+
+    subgraph D["Prepare Path"]
+        D1["Phase 1 - Assess<br/>score-model.mjs or AI fallback"]
+        D2{"Score >= 4?"}
+        D3["Write .sealos/analysis.json<br/>Present analysis summary"]
+
+        D4["Phase 2 - Detect Existing Image<br/>GitHub URL / local repo / README / compose / registry checks"]
+        D5{"Found usable amd64 image?"}
+        D6["Update analysis.json.image_ref<br/>Skip Dockerfile build request details where possible"]
+
+        D7["Phase 3 - Dockerfile<br/>Reuse, fix, or generate Dockerfile"]
+        D8["Validate Dockerfile<br/>Prepare .dockerignore if needed"]
+
+        D9["Phase 4 - Generate delivery artifacts"]
+        D10["Write build-request.json"]
+        D11["Write delivery-manifest.json"]
+        D12["Write .sealos/template/index.yaml"]
+        D13["Phase 5 - Upload delivery bundle<br/>to GitHub persistent storage"]
+        D14["Write upload-result.json<br/>Return commit SHA / artifact paths / URL"]
+
+        DStop1["Stop - unsuitable project"]
+    end
+
+    A --> P01 --> P02 --> P03 --> P04 --> P05 --> D1
+    D1 --> D2
+    D2 -- "No" --> DStop1
+    D2 -- "Yes" --> D3 --> D4 --> D5
+    D5 -- "Yes" --> D6 --> D9
+    D5 -- "No" --> D7 --> D8 --> D9
+    D9 --> D10 --> D11 --> D12 --> D13 --> D14
