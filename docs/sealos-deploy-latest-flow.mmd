@@ -1,0 +1,165 @@
+flowchart TD
+    A["User runs /sealos-deploy<br/>Input: GitHub URL, local path, or current project"]
+
+    subgraph P0["Phase 0 - Preflight"]
+        P00["Create ~/.sealos/logs/deploy-YYYYMMDD-HHmmss.log"]
+        P01["Step 1<br/>Detect docker, git, node, python, gh, kubectl, curl, jq"]
+        P02["Step 1.2<br/>Always run docker info to verify daemon"]
+        P03["Step 2<br/>Classify immediate blockers vs build-path / update-path warnings"]
+        P04["Step 4.0<br/>Choose Sealos region"]
+        P05{"Authenticated for chosen region?"}
+        P06["Step 4.2<br/>OAuth Device Grant login<br/>Node script or full curl fallback"]
+        P07["Step 4.3<br/>Always choose workspace<br/>Switch kubeconfig if needed"]
+        P08["Step 3<br/>Resolve WORK_DIR, clone if needed,<br/>detect git metadata, read README"]
+        P09["Step 5<br/>Ready summary<br/>Record ENV and PROJECT"]
+    end
+
+    A --> P00 --> P01 --> P02 --> P03 --> P04 --> P05
+    P05 -- "No / region changed" --> P06 --> P07 --> P08 --> P09
+    P05 -- "Yes" --> P07 --> P08 --> P09
+
+    subgraph M["Deployment Mode Detection"]
+        M1["Step 1<br/>Read .sealos/state.json"]
+        M2{"Has last_deploy.app_name?"}
+        M15["Step 1.5<br/>If kubectl + kubeconfig ready,<br/>discover matching deployment from cluster"]
+        M16{"User confirms discovered deployment?"}
+        M17["Reconstruct last_deploy into .sealos/state.json"]
+        M3["Step 2<br/>Verify deployment still exists via kubectl"]
+        M4{"Deployment confirmed running?"}
+        M5["Clear stale last_deploy / fall back to DEPLOY mode"]
+        M6["Step 3<br/>Ask user: Update or New instance"]
+    end
+
+    P09 --> M1 --> M2
+    M2 -- "No" --> M15
+    M15 -- "No match / kubectl unavailable" --> R0
+    M15 -- "Match found" --> M16
+    M16 -- "No" --> R0
+    M16 -- "Yes" --> M17 --> M3
+    M2 -- "Yes" --> M3
+    M3 --> M4
+    M4 -- "No" --> M5 --> R0
+    M4 -- "Yes" --> M6
+    M6 -- "Update" --> U0
+    M6 -- "New instance" --> R0
+
+    subgraph R["Resume Detection - DEPLOY mode only"]
+        R0["Inspect existing artifacts:<br/>analysis.json, Dockerfile,<br/>build/build-result.json, template/index.yaml"]
+        R1{"Previous deploy artifacts found?"}
+        R2["Ask user: resume from checkpoint<br/>or restart from Phase 1"]
+        R3{"Highest usable checkpoint?"}
+        R4["Restart path:<br/>remove analysis/build/template artifacts"]
+    end
+
+    R0 --> R1
+    R1 -- "No" --> D1
+    R1 -- "Yes" --> R2
+    R2 -- "Resume" --> R3
+    R2 -- "Restart" --> R4 --> D1
+    R3 -- "template/index.yaml ready" --> D22
+    R3 -- "build-result.json success" --> D19
+    R3 -- "Dockerfile only" --> D9
+    R3 -- "analysis.json only" --> D4
+    R3 -- "nothing reusable" --> D1
+
+    subgraph D["DEPLOY Path"]
+        D1["Phase 1 - Assess<br/>score-model.mjs or AI fallback"]
+        D2{"Score >= 4?"}
+        D3["Write .sealos/analysis.json<br/>Present analysis summary"]
+
+        D4["Phase 2 - Detect Existing Image<br/>GitHub URL / local repo / README / compose / registry checks"]
+        D5{"Found usable amd64 image?"}
+        D6["Update analysis.json.image_ref<br/>Skip local build"]
+
+        D7["Phase 3 - Dockerfile<br/>Reuse, fix, or generate Dockerfile"]
+        D8["Validate Dockerfile<br/>Prepare .dockerignore if needed"]
+
+        D9["Phase 4.0 - Choose registry<br/>GHCR recommended or Docker Hub public-only"]
+        D10{"Registry auth/session ready?"}
+        D11["GHCR path<br/>gh auth status/login,<br/>ensure write:packages,<br/>docker login ghcr.io"]
+        D12["Docker Hub path<br/>Require existing docker login session"]
+        D13["Phase 4.1 - Build & Push<br/>build-push.mjs or docker buildx --push"]
+        D14{"Build success?"}
+        D15["Phase 4.2 - Error handling<br/>Read dockerfile-skill knowledge,<br/>fix Dockerfile, retry up to 3 times"]
+        D16["Phase 4.3 - Record result<br/>Write .sealos/build/build-result.json<br/>Update analysis.json.image_ref"]
+        D17{"Built image is GHCR but not anonymously pullable?"}
+        D18["Mark Phase 6 to create/update<br/>app-scoped imagePullSecret"]
+
+        D19["Phase 5 - Generate template<br/>Write .sealos/template/index.yaml"]
+        D20["Add public URL config if needed<br/>Reference imagePullSecrets by app name"]
+        D21["Phase 5.3 - Validate template"]
+        D22["Phase 5.5 - Interactive configuration<br/>Summarize inputs and env vars"]
+        D23["Collect required / optional user inputs<br/>Apply values back to template"]
+        D24{"User confirms deploy?"}
+
+        D25["Phase 6.1<br/>Build Deploy URL from ~/.sealos/auth.json"]
+        D26["If private GHCR build path:<br/>run ensure-image-pull-secret.mjs"]
+        D27["Phase 6.2<br/>POST template YAML + args<br/>via deploy-template.mjs or curl"]
+        D28{"Template API result"}
+        D29["201 Created<br/>Extract instance name and resources"]
+        D30["503 / 500 / unreachable<br/>Fallback to kubectl apply"]
+        D31["Render template variables using<br/>defaults, inputs, namespace, domain, cert secret"]
+        D32["Apply rendered resources with kubectl"]
+        D33{"kubectl apply + rollout verification success?"}
+        D34["Write .sealos/state.json<br/>Initialize or append history"]
+        D35["Cleanup temp clone if needed<br/>Show app URL and summary"]
+
+        DStop1["Stop - unsuitable project"]
+        DStop2["Stop - selected registry path not ready"]
+        DStop3["Stop - build failed after retries"]
+        DStop4["Stop - user canceled before deploy"]
+        DStop5["Stop - deployment failed and needs manual fix"]
+    end
+
+    D1 --> D2
+    D2 -- "No" --> DStop1
+    D2 -- "Yes" --> D3 --> D4 --> D5
+    D5 -- "Yes" --> D6 --> D19
+    D5 -- "No" --> D7 --> D8 --> D9
+    D9 -- "GHCR" --> D11 --> D10
+    D9 -- "Docker Hub" --> D12 --> D10
+    D10 -- "No" --> DStop2
+    D10 -- "Yes" --> D13 --> D14
+    D14 -- "No" --> D15 --> D14
+    D15 -->|"retry exhausted"| DStop3
+    D14 -- "Yes" --> D16 --> D17
+    D17 -- "Yes" --> D18 --> D19
+    D17 -- "No" --> D19
+    D19 --> D20 --> D21 --> D22 --> D23 --> D24
+    D24 -- "No" --> DStop4
+    D24 -- "Yes" --> D25 --> D26 --> D27 --> D28
+    D28 -- "201" --> D29 --> D34 --> D35
+    D28 -- "503 / 500 / unreachable" --> D30 --> D31 --> D32 --> D33
+    D33 -- "Yes" --> D34 --> D35
+    D33 -- "No" --> DStop5
+    D28 -- "400 / 401 / 403 / 409 / 422" --> DStop5
+
+    subgraph U["UPDATE Path"]
+        U0["Context from .sealos/state.json<br/>APP_NAME, NAMESPACE, REGION,<br/>CURRENT_IMAGE, REPO_NAME, APP_URL"]
+        U1["Phase U1<br/>Ask user: rebuild new image or restart only"]
+        U2{"Rebuild image?"}
+        U3["Reuse Phase 4 build logic<br/>Registry defaults to CURRENT_IMAGE registry"]
+        U4["Restart only<br/>NEW_IMAGE = CURRENT_IMAGE"]
+        U5{"NEW_IMAGE is private GHCR path?"}
+        U6["Create / refresh app-scoped imagePullSecret<br/>and patch Deployment if needed"]
+        U7["Phase U2<br/>kubectl set image"]
+        U8["Phase U2<br/>kubectl rollout restart"]
+        U9["Phase U3<br/>kubectl rollout status"]
+        U10{"Rollout success?"}
+        U11["Update .sealos/state.json<br/>Set last_deploy.image / last_updated_at<br/>Append success history entry"]
+        U12["Auto rollback<br/>kubectl rollout undo"]
+        U13["Append failed history entry<br/>Keep last_deploy.image unchanged"]
+        U14["Show updated app URL and summary"]
+        UStop["Stop after rollback<br/>Ask for manual debugging"]
+    end
+
+    U0 --> U1 --> U2
+    U2 -- "Yes" --> U3 --> U5
+    U2 -- "No" --> U4 --> U8
+    U5 -- "Yes" --> U6 --> U7
+    U5 -- "No" --> U7
+    U7 --> U9
+    U8 --> U9
+    U9 --> U10
+    U10 -- "Yes" --> U11 --> U14
+    U10 -- "No" --> U12 --> U13 --> UStop
