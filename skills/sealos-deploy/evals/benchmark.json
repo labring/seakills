@@ -119,12 +119,12 @@
         "errors": 0
       },
       "expectations": [
-        {"text": "identifies-nextjs", "passed": true, "evidence": "Report identifies 'Next.js 16, React 19' and 'site/ subdirectory'"},
-        {"text": "gives-score", "passed": true, "evidence": "Score is 5/12, with adjusted estimate 7-8/12 for site/"},
-        {"text": "identifies-project-structure", "passed": true, "evidence": "Report identifies 'two main components: skills/ and site/'"},
+        {"text": "identifies-nextjs", "passed": true, "evidence": "Report identifies a Next.js landing page in a subdirectory"},
+        {"text": "gives-score", "passed": true, "evidence": "Score is 5/12, with an adjusted estimate after inspecting the subdirectory app"},
+        {"text": "identifies-project-structure", "passed": true, "evidence": "Report identifies a mixed repository with skills plus a landing page"},
         {"text": "produces-structured-report", "passed": true, "evidence": "Structured report with dimension table, signal detection, anti-pattern check"}
       ],
-      "notes": ["score-model.mjs scans repo root, missing site/Dockerfile — underestimates score"]
+      "notes": ["score-model.mjs scans repo root and can miss Dockerfiles in subdirectories, which underestimates readiness"]
     },
     {
       "eval_id": 2,
@@ -142,9 +142,9 @@
         "errors": 0
       },
       "expectations": [
-        {"text": "identifies-nextjs", "passed": true, "evidence": "Identifies 'Next.js 16 landing page' in site/"},
+        {"text": "identifies-nextjs", "passed": true, "evidence": "Identifies a Next.js 16 landing page in a subdirectory"},
         {"text": "gives-score", "passed": true, "evidence": "Score is 9.5/12"},
-        {"text": "identifies-project-structure", "passed": true, "evidence": "Identifies 'two-part project: Skills + Landing Site'"},
+        {"text": "identifies-project-structure", "passed": true, "evidence": "Identifies a two-part project with skills plus a landing page"},
         {"text": "produces-structured-report", "passed": true, "evidence": "Structured report with scoring criteria, dimension tables, Dockerfile analysis"}
       ],
       "notes": []
@@ -478,7 +478,7 @@
   "analyst_notes": [
     "DISCRIMINATING ASSERTIONS: 'creates-log-file' (eval-0) is skill-specific and always fails without_skill — intentional. 'score-below-4' (eval-1 cli-tool-reject) fails for with_skill due to score-model.mjs inflating Rust binary scores — a known limitation.",
     "SCORE-MODEL.MJS BUG #1 (Compiled binaries): Gives all compiled binaries (Rust/Go) 2/2 for scalability and startup regardless of whether they run an HTTP server. This inflates bat CLI from expected 0→4/12. The AI assessment layer correctly catches this and applies STOP via CLI tool pattern detection.",
-    "SCORE-MODEL.MJS BUG #2 (Subdirectory blind spot): Scans repo root only. Projects with Dockerfile/package.json in subdirectories get deflated scores: mealie (docker/ → raw 5/12 vs actual 10/12), seakills (site/ → raw 5/12 vs adjusted 7-8/12), spring-petclinic (Dockerfile in root so unaffected). AI correctly compensates.",
+    "SCORE-MODEL.MJS BUG #2 (Subdirectory blind spot): Scans repo root only. Projects with Dockerfile/package.json in subdirectories get deflated scores: mealie (docker/ → raw 5/12 vs actual 10/12), while root-level projects like spring-petclinic are unaffected. AI correctly compensates when it inspects subdirectories.",
     "SCORE-MODEL.MJS BUG #3 (Library false positive): Flask framework source code scores 6/12 (above CONTINUE threshold) because it has Python files and test structure. AI correctly identifies the absence of application entry point and applies STOP. Without-skill baseline scores it a correct 2/12.",
     "COST TRADEOFF: With-skill runs average 81.3s slower and use 9352 more tokens (+18%). The overhead comes from reading skill files (~30KB), running score-model.mjs, and writing structured artifacts (context.json, deploy log). The payoff is deployment-specific artifacts and consistent structured output format.",
     "NON-DISCRIMINATING ASSERTIONS: Most assertions (identifies-*, score-*, produces-structured-report) pass in both configurations across 9/10 evals. The skill's differentiated value shows in: (a) structured artifact output, (b) AI score correction via assessment layer, (c) consistent STOP logic for edge cases.",
