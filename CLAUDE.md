@@ -4,25 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-Seakills is a skills repository for Sealos Cloud in the `skills.sh` ecosystem. The project has two main parts: the **skills** (markdown-based modules + Node.js scripts) and a **landing site** (Next.js).
+Seakills is a skills repository for Sealos Cloud in the `skills.sh` ecosystem. This repo contains the skills pack plus supporting helper scripts and eval fixtures. The landing site now lives in the separate `zjy365/seakills-site` repository.
 
 ## Commands
 
-### Site development (run from `site/`)
-```bash
-cd site && pnpm install    # install dependencies
-cd site && pnpm dev        # dev server on localhost:3000
-cd site && pnpm build      # production build
-cd site && pnpm lint       # ESLint
-```
+This repo does not have a single top-level app build.
 
-### Docker (site)
-```bash
-cd site && docker build -t seakills-site . && docker run -p 3000:3000 seakills-site
-```
-
-### CI
-GitHub Actions (`.github/workflows/deploy-site.yml`) triggers on push to `main` when `skills/**` or `site/**` change. It builds and pushes a Docker image to `ghcr.io/labring/seakills-site`.
+- Most work happens directly under `skills/**`
+- Run helper scripts with `node <path-to-script>.mjs`
+- Keep `skills/sealos-deploy/evals/` in sync when skill behavior changes
 
 ## Architecture
 
@@ -56,10 +46,8 @@ Mode detection reads `.sealos/state.json` `last_deploy` field. If a running depl
 
 State is tracked in `.sealos/state.json` (deployment state), `.sealos/analysis.json` (project analysis snapshot), and `.sealos/config.json` (optional user overrides). The `last_deploy` section in `state.json` records app name, namespace, image, and URL so later deploys can update in place instead of starting over.
 
-### Site (`site/`)
-Next.js 16 + React 19 + TypeScript landing page. Uses Radix UI, Tailwind CSS, and Motion for animations. Configured for standalone output.
-
 ## Key paths
+- `skills/sealos-deploy/SKILL.md` — primary entry point for the deploy workflow
 - `skills/sealos-deploy/config.json` — OAuth client_id, regional Sealos URLs
-- `site/next.config.mjs` — standalone output, unoptimized images, ignores TS build errors
-- `site/components.json` — shadcn/ui component config with `@/` path alias
+- `skills/sealos-deploy/scripts/` — auth, scoring, and helper automation scripts
+- `skills/sealos-deploy/evals/evals.json` — eval prompts and assertions

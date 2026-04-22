@@ -29,12 +29,12 @@
     {
       "id": 2,
       "prompt": "/sealos-deploy",
-      "expected_output": "Identifies Next.js site in site/ directory, provides readiness score, detects standalone output config",
+      "expected_output": "Low readiness score (0-3), identifies the current repository as a skills pack or tooling repo rather than a deployable web service, recommends STOP",
       "files": [],
       "assertions": [
-        {"name": "identifies-nextjs", "description": "Identifies the Next.js site in site/ directory"},
-        {"name": "gives-score", "description": "Provides a concrete numeric readiness score"},
-        {"name": "identifies-project-structure", "description": "Recognizes this is a mixed project (skills + site)"},
+        {"name": "identifies-skill-pack", "description": "Identifies the current repository as a skills pack or tooling repo rather than a standalone web app"},
+        {"name": "score-below-4", "description": "Readiness score is < 4 (not suitable for direct cloud deployment)"},
+        {"name": "recommends-stop", "description": "Explicitly recommends NOT deploying / STOP"},
         {"name": "produces-structured-report", "description": "Output contains a structured assessment report"}
       ]
     },

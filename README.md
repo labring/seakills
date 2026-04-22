@@ -53,6 +53,8 @@ Later runs can switch to an in-place update flow when an existing deployment is 
 
 [`skills/`](/Users/jingyang/zjy365/demo/github-pack/seakills/skills) contains `/sealos-deploy` and the supporting skills it uses during the deploy flow.
 
+The landing site source now lives in [zjy365/seakills-site](https://github.com/zjy365/seakills-site).
+
 ## License
 
 MIT
