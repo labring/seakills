@@ -1,7 +1,7 @@
 {
   "name": "sealos",
   "version": "0.1.0",
-  "description": "Build, deploy, update, and troubleshoot apps on Sealos Cloud from Codex.",
+  "description": "Ship any repo to Sealos Cloud, then build Sealos Desktop apps from Codex.",
   "author": {
     "name": "Sealos",
     "url": "https://sealos.io/"
@@ -18,8 +18,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Sealos",
-    "shortDescription": "Deploy and operate apps on Sealos Cloud.",
-    "longDescription": "Bring Sealos deployment workflows into Codex for app readiness checks, containerization, deployment preparation, in-place updates, and rollout verification.",
+    "shortDescription": "Ship any repo to Sealos Cloud from Codex.",
+    "longDescription": "Deploy GitHub and local projects to Sealos Cloud with readiness checks, Dockerfile generation, image builds, Sealos templates, rollout updates, and cloud-native migration helpers. You can also build Sealos Desktop apps with SDK integration, session data, and local debugging.",
     "developerName": "Sealos",
     "category": "Coding",
     "capabilities": [
@@ -30,9 +30,9 @@
     "privacyPolicyURL": "https://sealos.io/docs/msa/privacy-policy/",
     "termsOfServiceURL": "https://sealos.io/docs/msa/terms-of-service/",
     "defaultPrompt": [
-      "Use Sealos to assess this repo for Sealos Cloud deployment readiness.",
-      "Use Sealos to prepare Docker and deployment artifacts for this app.",
-      "Use Sealos to update an existing Sealos deployment and verify rollout."
+      "Deploy this repo to Sealos Cloud with Dockerfile, image build, and rollout checks.",
+      "Deploy this GitHub project to Sealos Cloud from source to running app.",
+      "Build a Sealos Desktop app with SDK auth, session data, and local debugging."
     ],
     "composerIcon": "./assets/logo.svg",
     "logo": "./assets/logo.svg"
