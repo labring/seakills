@@ -1,0 +1,40 @@
+{
+  "name": "sealos",
+  "version": "0.1.0",
+  "description": "Build, deploy, update, and troubleshoot apps on Sealos Cloud from Codex.",
+  "author": {
+    "name": "Sealos",
+    "url": "https://sealos.io/"
+  },
+  "homepage": "https://sealos.io/",
+  "repository": "https://github.com/labring/seakills",
+  "license": "MIT",
+  "keywords": [
+    "sealos",
+    "deployment",
+    "cloud",
+    "devops"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Sealos",
+    "shortDescription": "Deploy and operate apps on Sealos Cloud.",
+    "longDescription": "Bring Sealos deployment workflows into Codex for app readiness checks, containerization, deployment preparation, in-place updates, and rollout verification.",
+    "developerName": "Sealos",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://sealos.io/",
+    "privacyPolicyURL": "https://sealos.io/docs/msa/privacy-policy/",
+    "termsOfServiceURL": "https://sealos.io/docs/msa/terms-of-service/",
+    "defaultPrompt": [
+      "Use Sealos to assess this repo for Sealos Cloud deployment readiness.",
+      "Use Sealos to prepare Docker and deployment artifacts for this app.",
+      "Use Sealos to update an existing Sealos deployment and verify rollout."
+    ],
+    "composerIcon": "./assets/logo.svg",
+    "logo": "./assets/logo.svg"
+  }
+}

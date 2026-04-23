@@ -5,7 +5,4 @@ skills/sealos-deploy-workspace/
 .sealos/analysis.json
 .sealos/build/
 
-# Generated docs exports (keep Mermaid sources, ignore rendered outputs)
-docs/*.svg
-docs/*.png
-docs/*.pdf
+docs
