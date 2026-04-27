@@ -1,0 +1,37 @@
+{
+  "name": "@seakills/sealos-deploy-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --host 127.0.0.1 --port 4318",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start:run": "tsx src/cli/startRun.ts",
+    "status:run": "tsx src/cli/statusRun.ts",
+    "smoke:happy-path": "node --import tsx src/cli/smokeHappyPath.ts",
+    "smoke:gates": "node --import tsx src/cli/smokeHumanGates.ts",
+    "smoke:resume": "node --import tsx src/cli/smokeResume.ts",
+    "smoke:skill-entry": "node --import tsx src/cli/smokeSkillEntry.ts",
+    "smoke:status": "node --import tsx src/cli/smokeStatus.ts",
+    "smoke:update": "node --import tsx src/cli/smokeUpdatePath.ts",
+    "test:gates": "node --import tsx --test src/lib/workflow-human-gates.test.ts",
+    "test:contracts": "node --import tsx --test src/lib/script-contracts.test.ts src/steps/buildPushStep.test.ts src/steps/assessStep.test.ts",
+    "test:dockerfile": "node --import tsx --test src/steps/prepareDockerfileStep.test.ts",
+    "test:state": "node --import tsx --test src/lib/workflow-state.test.ts",
+    "test:update": "node --import tsx --test src/lib/workflow-update.test.ts"
+  },
+  "dependencies": {
+    "nitro": "3.0.1-alpha.1",
+    "workflow": "^4.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.20.6",
+    "typescript": "5.7.3",
+    "vite": "^7.3.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.4+sha512.b2dc20e2fc72b3e18848459b37359a32064663e5627a51e4c74b2c29dd8e8e0491483c3abb40789cfd578bf362fb6ba8261b05f0387d76792ed6e23ea3b1b6a0"
+}

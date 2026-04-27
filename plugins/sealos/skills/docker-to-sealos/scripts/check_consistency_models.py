@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 LATEST_IMAGE_PATTERN = re.compile(r"\b(?:image|originImageName)\s*:\s*['\"]?[^#\s'\"]*:latest\b")
 TEMPLATE_NAME_PATTERN = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
-NEGATIVE_MARKERS = ("错误示例", "wrong example", "❌", "invalid example")
+NEGATIVE_MARKERS = ("wrong example", "❌", "invalid example")
 WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 APP_WORKLOAD_KINDS = {"Deployment", "StatefulSet", "DaemonSet"}
 DB_SECRET_SUFFIXES = (

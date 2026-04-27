@@ -34,6 +34,10 @@
       "type": "string",
       "minLength": 1
     },
+    "docker_hub_user": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
     "env_overrides": {
       "type": "object",
       "additionalProperties": {

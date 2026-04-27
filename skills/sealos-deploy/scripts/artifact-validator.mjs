@@ -12,7 +12,34 @@ const SCHEMA_FILES = {
   analysis: 'analysis.schema.json',
   'build-result': 'build-result.schema.json',
   state: 'state.schema.json',
+  'workflow-state': 'workflow-state.schema.json',
 }
+
+const WORKFLOW_STEP_NAMES = [
+  'preflight',
+  'assess',
+  'detect-image',
+  'dockerfile',
+  'build-push',
+  'template',
+  'deploy',
+  'validate-artifacts',
+]
+
+const WORKFLOW_STEP_NAME_SET = new Set(WORKFLOW_STEP_NAMES)
+const WORKFLOW_PENDING_GATE_KINDS = ['auth', 'input', 'confirmation']
+const WORKFLOW_PENDING_GATE_KIND_SET = new Set(WORKFLOW_PENDING_GATE_KINDS)
+const WORKFLOW_PENDING_GATE_NAMES = [
+  'region-selection',
+  'sealos-auth',
+  'workspace-selection',
+  'workspace-change-confirmation',
+  'deploy-inputs',
+  'restart-confirmation',
+  'deploy-apply-confirmation',
+  'deployment-mode-confirmation',
+]
+const WORKFLOW_PENDING_GATE_NAME_SET = new Set(WORKFLOW_PENDING_GATE_NAMES)
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -265,6 +292,20 @@ function validateBuildResultSemantics(data, errors) {
 
 function validateStateSemantics(data, errors) {
   const { last_deploy: lastDeploy, history } = data
+  const forbiddenWorkflowFields = [
+    'current_step',
+    'steps_completed',
+    'checkpoints',
+    'resume',
+    'last_error',
+    'pending_gate',
+  ]
+
+  for (const forbiddenField of forbiddenWorkflowFields) {
+    if (Object.prototype.hasOwnProperty.call(data, forbiddenField)) {
+      pushError(errors, `$.${forbiddenField}`, 'must not appear in .sealos/state.json deploy facts')
+    }
+  }
 
   if (history[0]?.action !== 'deploy') {
     pushError(errors, '$.history[0].action', 'the first history entry must be deploy')
@@ -316,11 +357,130 @@ function validateStateSemantics(data, errors) {
   }
 }
 
+function validateWorkflowStepName(step, pointer, errors) {
+  if (step !== null && !WORKFLOW_STEP_NAME_SET.has(step)) {
+    pushError(errors, pointer, `must be one of ${WORKFLOW_STEP_NAMES.join(', ')}`)
+  }
+}
+
+function validateWorkflowPendingGate(gate, errors) {
+  if (!gate) {
+    return
+  }
+
+  if (!WORKFLOW_PENDING_GATE_KIND_SET.has(gate.kind)) {
+    pushError(errors, '$.pending_gate.kind', `must be one of ${WORKFLOW_PENDING_GATE_KINDS.join(', ')}`)
+  }
+
+  if (!WORKFLOW_PENDING_GATE_NAME_SET.has(gate.name)) {
+    pushError(errors, '$.pending_gate.name', `must be one of ${WORKFLOW_PENDING_GATE_NAMES.join(', ')}`)
+  }
+
+  if (gate.status !== 'waiting') {
+    pushError(errors, '$.pending_gate.status', 'must equal waiting')
+  }
+
+  if (!isIsoDateTime(gate.created_at)) {
+    pushError(errors, '$.pending_gate.created_at', 'must be a valid ISO 8601 date-time')
+  }
+
+  if (gate.expires_at !== null && !isIsoDateTime(gate.expires_at)) {
+    pushError(errors, '$.pending_gate.expires_at', 'must be null or a valid ISO 8601 date-time')
+  }
+}
+
+function validateWorkflowStateSemantics(data, errors) {
+  if (!['deploy', 'update'].includes(data.execution_mode)) {
+    pushError(errors, '$.execution_mode', 'must be deploy or update')
+  }
+
+  if (typeof data.execution_summary !== 'string' || data.execution_summary.trim().length === 0) {
+    pushError(errors, '$.execution_summary', 'must be a non-empty string')
+  }
+
+  if (data.execution_mode === 'update' && !data.update_target) {
+    pushError(errors, '$.update_target', 'must be present when execution_mode is update')
+  }
+
+  if (data.execution_mode !== 'update' && data.update_target) {
+    pushError(errors, '$.update_target', 'must be null unless execution_mode is update')
+  }
+
+  if (data.deployment_choice === 'update' && data.execution_mode !== 'update') {
+    pushError(errors, '$.deployment_choice', 'cannot be update when execution_mode is deploy')
+  }
+
+  if (data.update_attempt) {
+    if (data.update_attempt.max_attempts < data.update_attempt.attempt) {
+      pushError(errors, '$.update_attempt.max_attempts', 'must be >= attempt')
+    }
+
+    if (data.update_attempt.exhausted && data.update_attempt.attempt !== data.update_attempt.max_attempts) {
+      pushError(errors, '$.update_attempt.exhausted', 'must only be true on the final allowed attempt')
+    }
+
+    if (data.update_attempt.terminal_failure && !data.update_attempt.last_failure_message) {
+      pushError(errors, '$.update_attempt.last_failure_message', 'must be present for terminal update failures')
+    }
+
+    if (data.update_attempt.terminal_failure && data.update_attempt.exhausted === false) {
+      pushError(errors, '$.update_attempt.exhausted', 'must not be false when terminal_failure is true')
+    }
+
+    if (data.update_attempt.rollback_completed_at && !data.update_attempt.terminal_failure) {
+      pushError(errors, '$.update_attempt.rollback_completed_at', 'must be null unless terminal_failure is true')
+    }
+
+    if (data.update_attempt.last_outcome_status === 'failed' && !data.update_attempt.last_failure_message) {
+      pushError(errors, '$.update_attempt.last_failure_message', 'must be present when last_outcome_status is failed')
+    }
+
+    if (data.update_attempt.last_outcome_status === 'succeeded' && data.update_attempt.terminal_failure) {
+      pushError(errors, '$.update_attempt.last_outcome_status', 'cannot be succeeded when terminal_failure is true')
+    }
+  }
+
+  validateWorkflowStepName(data.current_step, '$.current_step', errors)
+
+  for (let index = 0; index < data.steps_completed.length; index++) {
+    validateWorkflowStepName(data.steps_completed[index], `$.steps_completed[${index}]`, errors)
+  }
+
+  for (let index = 0; index < data.checkpoints.length; index++) {
+    validateWorkflowStepName(data.checkpoints[index].step, `$.checkpoints[${index}].step`, errors)
+  }
+
+  validateWorkflowStepName(data.resume.resume_from_step, '$.resume.resume_from_step', errors)
+
+  if (data.last_error) {
+    validateWorkflowStepName(data.last_error.step, '$.last_error.step', errors)
+  }
+
+  validateWorkflowPendingGate(data.pending_gate, errors)
+
+  if (data.resume.resume_count < 0) {
+    pushError(errors, '$.resume.resume_count', 'must be >= 0')
+  }
+
+  if (data.status === 'waiting' && !data.pending_gate) {
+    pushError(errors, '$.pending_gate', 'must be present when status is waiting')
+  }
+
+  if (data.status !== 'waiting' && data.pending_gate) {
+    pushError(errors, '$.status', 'must equal waiting when pending_gate is present')
+  }
+
+  if (data.status === 'completed' && !data.completed_at) {
+    pushError(errors, '$.completed_at', 'must be present when status is completed')
+  }
+}
+
 const SEMANTIC_VALIDATORS = {
   config: () => {},
   analysis: validateAnalysisSemantics,
   'build-result': validateBuildResultSemantics,
   state: validateStateSemantics,
+  'workflow-state': validateWorkflowStateSemantics,
 }
 
 export function inferArtifactKind(filePath) {
@@ -334,6 +494,8 @@ export function inferArtifactKind(filePath) {
       return 'build-result'
     case 'state.json':
       return 'state'
+    case 'workflow-state.json':
+      return 'workflow-state'
     default:
       return null
   }

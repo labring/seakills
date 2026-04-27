@@ -387,7 +387,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: 演示应用模板
+                      description: Demo application template
                       readme: https://raw.githubusercontent.com/example/demo/main/README_zh.md
                   categories:
                     - ai
@@ -433,7 +433,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: 演示应用模板
+                      description: Demo application template
                       readme: https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/demo/README_zh.md
                   categories:
                     - ai
@@ -448,7 +448,7 @@ class CheckConsistencyTests(unittest.TestCase):
             )
             self.assertFalse(any(item.rule_id == "R025" for item in violations))
 
-    def test_detects_non_chinese_i18n_zh_description_in_artifact(self):
+    def test_detects_missing_i18n_zh_description_in_artifact(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             skill = root / "SKILL.md"
@@ -478,7 +478,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: Demo template
+                      readme: https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/demo/README_zh.md
                   categories:
                     - ai
                 """,
@@ -523,7 +523,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   i18n:
                     zh:
                       title: Demo
-                      description: 示例应用模板
+                      description: Example application template
                   categories:
                     - ai
                 """,
@@ -537,7 +537,7 @@ class CheckConsistencyTests(unittest.TestCase):
             )
             self.assertTrue(any(item.rule_id == "R022" for item in violations))
 
-    def test_allows_template_with_chinese_i18n_zh_description_and_no_zh_title(self):
+    def test_allows_template_with_english_i18n_zh_description_and_no_zh_title(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             skill = root / "SKILL.md"
@@ -567,7 +567,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: 演示应用模板
+                      description: Demo application template
                   categories:
                     - ai
                 """,
@@ -611,7 +611,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: 演示应用模板
+                      description: Demo application template
                   categories:
                     - tool
                     - security
@@ -656,7 +656,7 @@ class CheckConsistencyTests(unittest.TestCase):
                   locale: en
                   i18n:
                     zh:
-                      description: 演示应用模板
+                      description: Demo application template
                   categories:
                     - tool
                     - backend
@@ -1508,7 +1508,7 @@ class CheckConsistencyTests(unittest.TestCase):
     def test_ignores_latest_tag_in_negative_example_block(self):
         violations = self.run_checker(
             """
-            错误示例
+            Wrong example
             ```yaml
             apiVersion: apps/v1
             kind: Deployment

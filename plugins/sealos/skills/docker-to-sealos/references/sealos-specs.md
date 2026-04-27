@@ -217,7 +217,7 @@ spec:
   locale: en  # Default language
   i18n:
     zh:
-      description: '中文描述'
+      description: 'English description'
 ```
 
 ### Configuration Example
@@ -233,7 +233,7 @@ spec:
   locale: en
   i18n:
     zh:
-      description: '一个用于演示的示例应用程序'
+      description: 'An example application for demonstration'
 ```
 
 ### Supported Fields
@@ -244,10 +244,10 @@ The i18n configuration supports translation of the following fields:
 ### Notes
 
 1. `locale` specifies the default language, typically set to `en`
-2. Currently only `zh` (Chinese) translation is supported
-3. `i18n.zh.description` should use Simplified Chinese
+2. This repository keeps all template copy in English for public release.
+3. `i18n.zh.description` should use English in this repository.
 4. Technical field names and default values do not need translation
-5. If the Chinese title is the same as `spec.title`, it is recommended to omit `i18n.zh.title`
+5. If the localized title is the same as `spec.title`, it is recommended to omit `i18n.zh.title`
 
 ## Categories Restrictions
 

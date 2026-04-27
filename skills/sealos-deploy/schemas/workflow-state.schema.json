@@ -1,0 +1,527 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skills.sh/sealos-deploy/schemas/workflow-state.schema.json",
+  "title": "Sealos Deploy Workflow State Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "workflow",
+    "run_id",
+    "status",
+    "execution_mode",
+    "execution_summary",
+    "deployment_choice",
+    "update_target",
+    "update_attempt",
+    "current_step",
+    "steps_completed",
+    "checkpoints",
+    "resume",
+    "last_error",
+    "pending_gate",
+    "started_at",
+    "updated_at",
+    "completed_at"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "workflow": {
+      "const": "sealos-deploy"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "waiting",
+        "resumable",
+        "failed",
+        "completed"
+      ]
+    },
+    "execution_mode": {
+      "type": "string",
+      "enum": [
+        "deploy",
+        "update"
+      ]
+    },
+    "execution_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deployment_choice": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "new-instance",
+            "update"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "update_target": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "app_name",
+            "namespace",
+            "region",
+            "image",
+            "repo_name",
+            "url"
+          ],
+          "properties": {
+            "app_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "namespace": {
+              "type": "string",
+              "minLength": 1
+            },
+            "region": {
+              "type": "string",
+              "minLength": 1
+            },
+            "image": {
+              "type": "string",
+              "minLength": 1
+            },
+            "repo_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "update_attempt": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attempt",
+            "max_attempts",
+            "last_failure_at",
+            "last_failure_message",
+            "terminal_failure",
+            "rollback_completed_at"
+          ],
+          "properties": {
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "last_attempt_started_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_outcome_status": {
+              "type": "string",
+              "enum": [
+                "running",
+                "retrying",
+                "succeeded",
+                "failed"
+              ]
+            },
+            "last_outcome_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_outcome_message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_failure_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "last_failure_message": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "exhausted": {
+              "type": "boolean"
+            },
+            "terminal_failure": {
+              "type": "boolean"
+            },
+            "rollback_completed_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "current_step": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "preflight",
+            "assess",
+            "detect-image",
+            "dockerfile",
+            "build-push",
+            "template",
+            "deploy",
+            "validate-artifacts"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "steps_completed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "preflight",
+          "assess",
+          "detect-image",
+          "dockerfile",
+          "build-push",
+          "template",
+          "deploy",
+          "validate-artifacts"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "step",
+          "status",
+          "completed_at",
+          "artifact_paths",
+          "summary"
+        ],
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "preflight",
+              "assess",
+              "detect-image",
+              "dockerfile",
+              "build-push",
+              "template",
+              "deploy",
+              "validate-artifacts"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "skipped",
+              "dry-run"
+            ]
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "artifact_paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "image_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "resume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resume_from_step",
+        "resume_count",
+        "last_resumed_at",
+        "migration_source"
+      ],
+      "properties": {
+        "resume_from_step": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "preflight",
+                "assess",
+                "detect-image",
+                "dockerfile",
+                "build-push",
+                "template",
+                "deploy",
+                "validate-artifacts"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resume_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_resumed_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "migration_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "last_error": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "step",
+            "message",
+            "at"
+          ],
+          "properties": {
+            "step": {
+              "type": "string",
+              "enum": [
+                "preflight",
+                "assess",
+                "detect-image",
+                "dockerfile",
+                "build-push",
+                "template",
+                "deploy",
+                "validate-artifacts"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pending_gate": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name",
+            "status",
+            "prompt",
+            "payload",
+            "created_at",
+            "expires_at",
+            "resume_hint"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "auth",
+                "input",
+                "confirmation"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "enum": [
+                "region-selection",
+                "sealos-auth",
+                "workspace-selection",
+                "workspace-change-confirmation",
+                "deploy-inputs",
+                "restart-confirmation",
+                "deploy-apply-confirmation",
+                "deployment-mode-confirmation"
+              ]
+            },
+            "step": {
+              "type": "string",
+              "enum": [
+                "preflight",
+                "assess",
+                "detect-image",
+                "dockerfile",
+                "build-push",
+                "template",
+                "deploy",
+                "validate-artifacts"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "waiting"
+              ]
+            },
+            "prompt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "payload": {
+              "type": "object"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expires_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "resume_hint": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

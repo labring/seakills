@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 0,
-      "prompt": "我想把 uptime-kuma 部署到 sealos，GitHub: https://github.com/louislam/uptime-kuma",
+      "prompt": "I want to deploy uptime-kuma to Sealos, GitHub: https://github.com/louislam/uptime-kuma",
       "expected_output": "High readiness score (7+), identifies Node.js project with external services, recommends proceeding with deployment",
       "files": [],
       "assertions": [
@@ -40,7 +40,7 @@
     },
     {
       "id": 3,
-      "prompt": "帮我把 alist 部署到 sealos，项目地址 https://github.com/alist-org/alist",
+      "prompt": "Help me deploy alist to Sealos, project URL: https://github.com/alist-org/alist",
       "expected_output": "High readiness score (8+), identifies Go web application with REST API and WebDAV server, recommends CONTINUE",
       "files": [],
       "assertions": [
@@ -76,7 +76,7 @@
     },
     {
       "id": 6,
-      "prompt": "部署 vaultwarden 到 sealos: https://github.com/dani-garcia/vaultwarden",
+      "prompt": "Deploy vaultwarden to Sealos: https://github.com/dani-garcia/vaultwarden",
       "expected_output": "Maximum readiness score (12/12), identifies Rust web application with Rocket framework and existing Dockerfile, recommends CONTINUE",
       "files": [],
       "assertions": [
@@ -100,7 +100,7 @@
     },
     {
       "id": 8,
-      "prompt": "帮我把 mealie (家庭食谱管理) 部署上去: https://github.com/mealie-recipes/mealie",
+      "prompt": "Help me deploy mealie (family recipe manager): https://github.com/mealie-recipes/mealie",
       "expected_output": "High readiness score (8+), identifies Python FastAPI application with PostgreSQL support, recommends CONTINUE",
       "files": [],
       "assertions": [
