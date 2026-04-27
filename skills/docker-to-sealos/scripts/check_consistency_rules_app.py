@@ -37,7 +37,7 @@ TEMPLATE_REQUIRED_SPEC_FIELDS = {
 FLOATING_TAG_ALIASES = {"latest", "stable", "main", "master", "edge", "nightly", "dev"}
 FLOATING_NUMERIC_TAG_RE = re.compile(r"^v?\d+(?:\.\d+)?$")
 COMPOSE_VAR_IN_IMAGE_RE = re.compile(r"\$(?:\{[^}]+\}|[A-Za-z_][A-Za-z0-9_]*)")
-CJK_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
+ZH_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
 ALLOWED_TEMPLATE_CATEGORIES = {
     "tool",
     "ai",
@@ -477,7 +477,7 @@ def check_template_readme_paths(context: ScanContext) -> List[Violation]:
     return violations
 
 
-def check_template_i18n_zh_description_english(context: ScanContext) -> List[Violation]:
+def check_template_i18n_zh_description_chinese(context: ScanContext) -> List[Violation]:
     violations: List[Violation] = []
     for doc in _iter_template_artifact_documents(context):
         spec = doc.data.get("spec") if isinstance(doc.data, dict) else None
@@ -485,7 +485,7 @@ def check_template_i18n_zh_description_english(context: ScanContext) -> List[Vio
         zh = i18n.get("zh") if isinstance(i18n, dict) else None
         description = zh.get("description") if isinstance(zh, dict) else None
 
-        if isinstance(description, str) and description.strip() and not CJK_CHAR_RE.search(description):
+        if isinstance(description, str) and description.strip() and ZH_CHAR_RE.search(description):
             continue
 
         add_doc_violation(
@@ -494,7 +494,7 @@ def check_template_i18n_zh_description_english(context: ScanContext) -> List[Vio
             doc=doc,
             pattern=r"^\s*i18n\s*:",
             default_pattern=r"^\s*spec\s*:",
-            message="Template spec.i18n.zh.description must be provided in English",
+            message="Template spec.i18n.zh.description must be provided in Simplified Chinese",
         )
     return violations
 
@@ -1442,7 +1442,7 @@ APP_RULES: Dict[str, Rule] = {
     "R013": Rule("R013", check_template_folder_matches_name),
     "R014": Rule("R014", check_template_icon_paths),
     "R025": Rule("R025", check_template_readme_paths),
-    "R021": Rule("R021", check_template_i18n_zh_description_english),
+    "R021": Rule("R021", check_template_i18n_zh_description_chinese),
     "R022": Rule("R022", check_template_i18n_zh_title_absent),
     "R023": Rule("R023", check_template_categories_allowed),
     "R024": Rule("R024", check_official_health_probes),

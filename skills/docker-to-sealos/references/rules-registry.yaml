@@ -44,7 +44,7 @@ rules:
     description: Template spec.readme and spec.i18n.zh.readme must point to fixed labring-actions template raw URLs.
     severity: error
   - id: R021
-    description: Template spec.i18n.zh.description must be provided in English.
+    description: Template spec.i18n.zh.description must be provided in Simplified Chinese.
     severity: error
   - id: R022
     description: Template spec.i18n.zh.title should be omitted when it is identical to spec.title.

@@ -96,7 +96,7 @@ If validation fails, fix template/rules/examples first.
 - Template `spec.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README.md`.
 - Template `spec.i18n.zh.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README_zh.md`.
 - `icon` URL must point to template repo raw path for this app on `kb-0.9` branch.
-- `i18n.zh.description` must be written in English for this repository release.
+- `i18n.zh.description` must be written in Simplified Chinese.
 - Omit `i18n.zh.title` when it is identical to `title`.
 - `categories` must only use predefined values (`tool`, `ai`, `game`, `database`, `low-code`, `monitor`, `dev-ops`, `blog`, `storage`, `frontend`, `backend`).
 

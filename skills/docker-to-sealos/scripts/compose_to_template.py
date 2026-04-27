@@ -91,14 +91,33 @@ COMPOSE_BRACED_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 COMPOSE_SIMPLE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
 DB_COMPONENT_RESOURCE_LIMITS = {"cpu": "500m", "memory": "512Mi"}
 DB_COMPONENT_RESOURCE_REQUESTS = {"cpu": "50m", "memory": "51Mi"}
-CJK_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
+ZH_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
 EN_DESCRIPTION_REWRITE_PATTERNS: Tuple[Tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"\bopen[- ]source identity and access management platform for authentication and authorization\b"
         ),
-        "Open-source identity and access management platform with authentication and authorization support",
+        "开源身份与访问管理平台，提供认证与授权能力",
     ),
+)
+EN_DESCRIPTION_TERM_REPLACEMENTS: Tuple[Tuple[str, str], ...] = (
+    ("identity and access management", "身份与访问管理"),
+    ("authentication and authorization", "认证与授权"),
+    ("open-source", "开源"),
+    ("open source", "开源"),
+    ("self-hosted", "可自托管"),
+    ("platform", "平台"),
+    ("service", "服务"),
+    ("application", "应用"),
+    ("tool", "工具"),
+    ("database", "数据库"),
+    ("monitoring", "监控"),
+    ("analytics", "分析"),
+    ("authentication", "认证"),
+    ("authorization", "授权"),
+    ("for", "用于"),
+    ("with", "支持"),
+    ("and", "与"),
 )
 ALLOWED_TEMPLATE_CATEGORIES = {
     "tool",
@@ -509,17 +528,19 @@ def infer_metadata(opts: argparse.Namespace, compose_data: Mapping[str, Any], co
     )
 
 
-def build_i18n_description(title: str, description: str) -> str:
+def build_zh_description(title: str, description: str) -> str:
     raw = re.sub(r"\s+", " ", description.strip())
-    rewritten = rewrite_english_description(raw)
+    if raw and ZH_CHAR_RE.search(raw):
+        return raw
+    rewritten = rewrite_english_description_to_zh(raw)
     if rewritten:
         return rewritten
-    if raw and not CJK_CHAR_RE.search(raw):
-        return ensure_terminal_period(raw)
-    return f"Sealos template for {title}, providing deployment support for the {title} application."
+    if raw:
+        return f"{title} 的 Sealos 模板，提供 {title} 应用的部署能力。"
+    return f"{title} 的 Sealos 模板。"
 
 
-def rewrite_english_description(description: str) -> str:
+def rewrite_english_description_to_zh(description: str) -> str:
     normalized = description.strip().strip(".")
     if not normalized:
         return ""
@@ -527,18 +548,22 @@ def rewrite_english_description(description: str) -> str:
 
     for pattern, rewritten in EN_DESCRIPTION_REWRITE_PATTERNS:
         if pattern.search(lowered):
-            return ensure_terminal_period(rewritten)
+            return f"{rewritten}。"
 
-    return ""
-
-
-def ensure_terminal_period(text: str) -> str:
-    normalized = text.strip()
-    if not normalized:
+    translated = lowered
+    for source, target in EN_DESCRIPTION_TERM_REPLACEMENTS:
+        translated = re.sub(rf"\b{re.escape(source)}\b", target, translated)
+    translated = re.sub(r"\s+", " ", translated).strip(" ,;")
+    translated = translated.replace(",", "，").replace(";", "；").replace(":", "：")
+    translated = re.sub(r"\s*，\s*", "，", translated)
+    translated = re.sub(r"\s*；\s*", "；", translated)
+    translated = re.sub(r"\s*：\s*", "：", translated)
+    translated = re.sub(r"\s+", " ", translated).strip()
+    if not translated or not ZH_CHAR_RE.search(translated):
         return ""
-    if normalized.endswith((".", "!", "?")):
-        return normalized
-    return f"{normalized}."
+    if translated.endswith(("。", "！", "？")):
+        return translated
+    return f"{translated}。"
 
 
 def parse_env(service: Mapping[str, Any]) -> List[Tuple[str, str]]:
@@ -1055,7 +1080,7 @@ def build_template_resource(meta: MetadataOptions) -> Dict[str, Any]:
             "locale": "en",
             "i18n": {
                 "zh": {
-                    "description": build_i18n_description(meta.title, meta.description),
+                    "description": build_zh_description(meta.title, meta.description),
                     "readme": f"{readme_base}/README_zh.md",
                 }
             },

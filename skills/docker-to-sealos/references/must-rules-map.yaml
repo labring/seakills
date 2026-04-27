@@ -24,7 +24,7 @@ must_rules:
     enforcement:
       type: rule
       target: R014
-  - must: "`i18n.zh.description` must be written in English for this repository release."
+  - must: "`i18n.zh.description` must be written in Simplified Chinese."
     enforcement:
       type: rule
       target: R021

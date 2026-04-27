@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import tempfile
 import textwrap
 import unittest
@@ -14,7 +15,7 @@ from check_consistency_runner import run_checks
 from compose_to_template import (
     MetadataOptions,
     ServiceShape,
-    build_i18n_description,
+    build_zh_description,
     convert_compose_to_template,
     infer_metadata,
     parse_args,
@@ -89,7 +90,7 @@ class ComposeToTemplateTests(unittest.TestCase):
             template = next(doc for doc in docs if doc.get("kind") == "Template")
             zh = template["spec"]["i18n"]["zh"]
             self.assertNotIn("title", zh)
-            self.assertEqual("Demo app.", zh["description"])
+            self.assertRegex(zh["description"], re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]"))
             self.assertEqual(
                 "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/demo/README.md",
                 template["spec"]["readme"],
@@ -970,22 +971,19 @@ class ComposeToTemplateTests(unittest.TestCase):
         meta = infer_metadata(args, compose_data, Path("docker-compose.yml"))
         self.assertEqual(("tool",), meta.categories)
 
-    def test_build_i18n_description_rewrites_identity_platform_description(self):
-        i18n_description = build_i18n_description(
+    def test_build_zh_description_rewrites_identity_platform_description(self):
+        zh_description = build_zh_description(
             "ZITADEL",
             "Open-source identity and access management platform for authentication and authorization.",
         )
-        self.assertEqual(
-            "Open-source identity and access management platform with authentication and authorization support.",
-            i18n_description,
-        )
+        self.assertEqual("开源身份与访问管理平台，提供认证与授权能力。", zh_description)
 
-    def test_build_i18n_description_normalizes_plain_english_description(self):
-        i18n_description = build_i18n_description(
+    def test_build_zh_description_keeps_existing_chinese_text(self):
+        zh_description = build_zh_description(
             "Demo",
-            "Demo application template",
+            "开源身份与访问管理平台，提供认证与授权能力。",
         )
-        self.assertEqual("Demo application template.", i18n_description)
+        self.assertEqual("开源身份与访问管理平台，提供认证与授权能力。", zh_description)
 
     def test_resolve_image_reference_promotes_floating_tag_to_precise_version(self):
         image = "ghcr.io/example/demo:v2"
