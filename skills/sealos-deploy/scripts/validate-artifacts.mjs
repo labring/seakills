@@ -14,6 +14,7 @@ function collectProjectArtifacts(workDir) {
     path.join(sealosDir, 'analysis.json'),
     path.join(sealosDir, 'build', 'build-result.json'),
     path.join(sealosDir, 'state.json'),
+    path.join(sealosDir, 'workflow-state.json'),
   ]
 
   return candidates

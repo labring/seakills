@@ -17,30 +17,6 @@
 import fs from 'fs';
 import path from 'path';
 
-// ─── Language Priority ───────────────────────────────────────
-
-const LANGUAGE_PRIORITY = ['go', 'rust', 'java', 'node', 'python', 'php', 'ruby', 'dotnet'];
-
-function pickPrimaryLanguage(langSignals, fwSignals) {
-  const detected = Object.entries(langSignals).filter(([, v]) => v).map(([k]) => k);
-  if (detected.length <= 1) return detected[0] || null;
-
-  // Prefer languages with a detected web framework
-  const withFramework = detected.filter(lang => {
-    if (lang === 'node') return fwSignals.nextjs || fwSignals.nuxt || fwSignals.express || fwSignals.hono || fwSignals.fastify || fwSignals.nestjs;
-    if (lang === 'python') return fwSignals.fastapi || fwSignals.django || fwSignals.flask;
-    if (lang === 'go') return fwSignals.gin || fwSignals.echo || fwSignals.fiber;
-    if (lang === 'java') return fwSignals.spring;
-    return false;
-  });
-
-  if (withFramework.length === 1) return withFramework[0];
-
-  // Multiple with frameworks or none → sort by priority (compiled > interpreted)
-  const pool = withFramework.length > 0 ? withFramework : detected;
-  return pool.sort((a, b) => LANGUAGE_PRIORITY.indexOf(a) - LANGUAGE_PRIORITY.indexOf(b))[0];
-}
-
 // ─── Signal Detection ───────────────────────────────────────
 
 function detectSignals(repoDir) {
@@ -252,127 +228,106 @@ function detectSignals(repoDir) {
     }
   }
 
-  // ── Package Manager Detection ──
-  const pm = {};
-  if (lang.node) {
-    if (has('pnpm-lock.yaml')) pm.name = 'pnpm';
-    else if (has('yarn.lock')) pm.name = 'yarn';
-    else if (has('bun.lockb') || has('bun.lock')) pm.name = 'bun';
-    else pm.name = 'npm';
-  } else if (lang.python) {
-    pm.name = has('Pipfile') ? 'pipenv' : 'pip';
-  } else if (lang.go) {
-    pm.name = 'go';
-  } else if (lang.java) {
-    pm.name = has('gradlew') || has('build.gradle') || has('build.gradle.kts') ? 'gradle' : 'maven';
-  } else if (lang.rust) {
-    pm.name = 'cargo';
-  } else if (lang.php) {
-    pm.name = 'composer';
-  } else if (lang.ruby) {
-    pm.name = 'bundler';
-  }
-
-  // ── Port Detection (concrete value) ──
-  const port = {};
-  if (lang.node) {
-    if (fw.nextjs || fw.nuxt) port.value = 3000;
-    else if (fw.nestjs) port.value = 3000;
-    else if (fw.astro) port.value = 4321;
-  }
-  if (lang.go && !port.value) port.value = 8080;
-  if (lang.python && (fw.fastapi || fw.flask) && !port.value) port.value = 8000;
-  if (lang.python && fw.django && !port.value) port.value = 8000;
-  if (lang.java && fw.spring && !port.value) port.value = 8080;
-  if (lang.rust && !port.value) port.value = 8080;
-  if (lang.php && !port.value) port.value = 80;
-  if (lang.ruby && !port.value) port.value = 3000;
-  port.source = port.value ? 'framework-default' : 'unknown';
-
-  // ── Database Types (concrete list) ──
-  const databases = [];
-  if (state.uses_postgres) databases.push('postgres');
-  if (state.uses_mysql) databases.push('mysql');
-  if (state.uses_mongodb) databases.push('mongodb');
-  if (state.uses_redis) databases.push('redis');
-  if (state.uses_sqlite) databases.push('sqlite');
-
-  // ── Runtime Version Detection ──
-  const runtime_version = {};
-  if (lang.node) {
-    const pkg = readJson('package.json');
-    const engines = pkg?.engines?.node;
-    if (engines) {
-      const match = engines.match(/(\d+)/);
-      runtime_version.node = match ? match[1] : '22';
-      runtime_version.source = 'engines';
-    } else {
-      const versionFiles = ['.node-version', '.nvmrc'];
-      for (const f of versionFiles) {
-        if (has(f)) {
-          try {
-            const raw = fs.readFileSync(path.join(repoDir, f), 'utf-8').trim();
-            const m = raw.match(/(\d+)/);
-            if (m) { runtime_version.node = m[1]; runtime_version.source = f; break; }
-          } catch { /* skip */ }
-        }
-      }
-      if (!runtime_version.node) {
-        if (has('.tool-versions')) {
-          try {
-            const content = fs.readFileSync(path.join(repoDir, '.tool-versions'), 'utf-8');
-            const m = content.match(/nodejs?\s+(\d+)/);
-            if (m) { runtime_version.node = m[1]; runtime_version.source = '.tool-versions'; }
-          } catch { /* skip */ }
-        }
-      }
-      if (!runtime_version.node) { runtime_version.node = '22'; runtime_version.source = 'default'; }
-    }
-  } else if (lang.python) {
-    if (has('.python-version')) {
-      try {
-        const raw = fs.readFileSync(path.join(repoDir, '.python-version'), 'utf-8').trim();
-        const m = raw.match(/(\d+\.\d+)/);
-        if (m) { runtime_version.python = m[1]; runtime_version.source = '.python-version'; }
-      } catch { /* skip */ }
-    }
-    if (!runtime_version.python) {
-      const pyproject = has('pyproject.toml') ?
-        fs.readFileSync(path.join(repoDir, 'pyproject.toml'), 'utf-8') : '';
-      const m = pyproject.match(/requires-python\s*=\s*"[><=]*(\d+\.\d+)/);
-      if (m) { runtime_version.python = m[1]; runtime_version.source = 'pyproject.toml'; }
-    }
-    if (!runtime_version.python) { runtime_version.python = '3.12'; runtime_version.source = 'default'; }
-  } else if (lang.go) {
-    if (has('go.mod')) {
-      try {
-        const content = fs.readFileSync(path.join(repoDir, 'go.mod'), 'utf-8');
-        const m = content.match(/^go\s+(\d+\.\d+)/m);
-        if (m) { runtime_version.go = m[1]; runtime_version.source = 'go.mod'; }
-      } catch { /* skip */ }
-    }
-    if (!runtime_version.go) { runtime_version.go = '1.23'; runtime_version.source = 'default'; }
-  } else if (lang.java) {
-    runtime_version.java = '21'; runtime_version.source = 'default';
-    if (has('pom.xml')) {
-      try {
-        const pom = fs.readFileSync(path.join(repoDir, 'pom.xml'), 'utf-8');
-        const m = pom.match(/<java\.version>(\d+)</) || pom.match(/<maven\.compiler\.source>(\d+)</);
-        if (m) { runtime_version.java = m[1]; runtime_version.source = 'pom.xml'; }
-      } catch { /* skip */ }
-    }
-  } else if (lang.rust) {
-    if (has('rust-toolchain.toml') || has('rust-toolchain')) {
-      runtime_version.rust = 'stable'; runtime_version.source = 'rust-toolchain';
-    } else {
-      runtime_version.rust = 'stable'; runtime_version.source = 'default';
-    }
-  }
-
-  return { lang, fw, http, state, config, docker, mono, lifecycle, pm, port, databases, runtime_version };
+  return { lang, fw, http, state, config, docker, mono, lifecycle };
 }
 
 // ─── Scoring Algorithm ──────────────────────────────────────
+
+function readJsonSafe(repoDir, fileName) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(repoDir, fileName), 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function readTextSafe(repoDir, fileName) {
+  try {
+    return fs.readFileSync(path.join(repoDir, fileName), 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+function primaryLanguage(languages) {
+  return languages[0] || null;
+}
+
+function detectPackageManager(repoDir, language) {
+  const has = (fileName) => fs.existsSync(path.join(repoDir, fileName));
+  if (language === 'node') {
+    if (has('pnpm-lock.yaml')) return 'pnpm';
+    if (has('yarn.lock')) return 'yarn';
+    if (has('bun.lockb') || has('bun.lock')) return 'bun';
+    return 'npm';
+  }
+  if (language === 'go') return 'go';
+  if (language === 'rust') return 'cargo';
+  if (language === 'php') return 'composer';
+  if (language === 'ruby') return 'bundler';
+  if (language === 'java') return has('build.gradle') || has('build.gradle.kts') || has('gradlew') ? 'gradle' : 'maven';
+  if (language === 'python') return has('Pipfile') ? 'pipenv' : 'pip';
+  return 'npm';
+}
+
+function detectPort(repoDir) {
+  const envFiles = ['.env.example', '.env.sample', '.env.template'];
+  for (const fileName of envFiles) {
+    const match = readTextSafe(repoDir, fileName).match(/^PORT=(\d{2,5})$/m);
+    if (match) return Number(match[1]);
+  }
+
+  const dockerfile = readTextSafe(repoDir, 'Dockerfile');
+  const expose = dockerfile.match(/^EXPOSE\s+(\d{2,5})/m);
+  return expose ? Number(expose[1]) : null;
+}
+
+function detectDatabases(state) {
+  return [
+    state.uses_postgres ? 'postgres' : null,
+    state.uses_mysql ? 'mysql' : null,
+    state.uses_mongodb ? 'mongodb' : null,
+    state.uses_redis ? 'redis' : null,
+    state.uses_sqlite ? 'sqlite' : null,
+  ].filter(Boolean);
+}
+
+function detectRuntimeVersion(repoDir, language) {
+  const version = { source: 'default' };
+  if (language === 'node') {
+    const pkg = readJsonSafe(repoDir, 'package.json');
+    const engine = pkg?.engines?.node;
+    if (engine) {
+      version.node = String(engine);
+      version.source = 'package.json engines.node';
+    }
+    else {
+      const nvmrc = readTextSafe(repoDir, '.nvmrc').trim();
+      if (nvmrc) {
+        version.node = nvmrc;
+        version.source = '.nvmrc';
+      } else {
+        version.node = process.versions.node.split('.')[0];
+      }
+    }
+  }
+  if (language === 'go') {
+    const match = readTextSafe(repoDir, 'go.mod').match(/^go\s+([0-9.]+)/m);
+    version.go = match ? match[1] : '1.22';
+    version.source = match ? 'go.mod' : 'default';
+  }
+  if (language === 'python') {
+    const py = readTextSafe(repoDir, '.python-version').trim();
+    version.python = py || '3.11';
+    version.source = py ? '.python-version' : 'default';
+  }
+  if (language === 'java') version.java = '21';
+  if (language === 'rust') version.rust = 'stable';
+  if (language === 'php') version.php = '8.3';
+  if (language === 'ruby') version.ruby = '3.3';
+  if (language === 'dotnet') version.dotnet = '8.0';
+  return version;
+}
 
 function scoreProject(repoDir) {
   const s = detectSignals(repoDir);
@@ -502,6 +457,8 @@ function scoreProject(repoDir) {
   else if (totalScore >= 7) verdict = 'Good';
   else if (totalScore >= 4) verdict = 'Fair';
   else verdict = 'Poor';
+  const languages = Object.entries(s.lang).filter(([, v]) => v).map(([k]) => k);
+  const primary = primaryLanguage(languages);
 
   return {
     score: totalScore,
@@ -512,20 +469,20 @@ function scoreProject(repoDir) {
     dimension_details: details,
     bonus_reasons: bonusReasons,
     signals: {
-      language: Object.entries(s.lang).filter(([, v]) => v).map(([k]) => k),
-      primary_language: pickPrimaryLanguage(s.lang, s.fw),
+      language: languages,
+      primary_language: primary,
       framework: Object.entries(s.fw).filter(([, v]) => v).map(([k]) => k),
       has_http_server: s.http.has_http_handler,
       external_db: s.state.uses_external_db,
       has_docker: s.docker.has_any,
       is_monorepo: s.mono.is_monorepo,
       has_env_example: s.config.has_env_example,
+      package_manager: detectPackageManager(repoDir, primary),
+      port: detectPort(repoDir),
+      port_source: detectPort(repoDir) === null ? 'default' : 'detected',
+      databases: detectDatabases(s.state),
+      runtime_version: detectRuntimeVersion(repoDir, primary),
       dockerfile_paths: s.docker._dockerfile_paths || [],
-      package_manager: s.pm.name || null,
-      port: s.port.value || null,
-      port_source: s.port.source,
-      databases: s.databases,
-      runtime_version: s.runtime_version,
     },
   };
 }
