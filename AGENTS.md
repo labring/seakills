@@ -4,7 +4,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What This Project Is
 
-Seakills is a skills repository for Sealos Cloud in the `skills.sh` ecosystem. This repo contains the skills pack plus supporting helper scripts and eval fixtures. The landing site now lives in the separate `zjy365/seakills-site` repository.
+Seakills is a skills repository for Sealos Cloud in the `skills.sh` ecosystem and a Codex plugin package. This repo contains the root-level skills pack plus supporting helper scripts and eval fixtures. The landing site now lives in the separate `zjy365/seakills-site` repository.
 
 ## Commands
 
@@ -34,6 +34,9 @@ Each skill follows the same structure:
 
 Skills reference paths with `<SKILL_DIR>` for self and `<SKILL_DIR>/../other-skill/` for siblings.
 
+### Codex plugin layout
+The repository root is the Codex plugin root. The manifest lives at `.codex-plugin/plugin.json`, the local marketplace entry lives at `.agents/plugins/marketplace.json`, and the manifest points directly to `./skills/`. Do not add a second packaged skill copy; root `skills/**` is the only skill source for both `skills.sh` and Codex plugin installs.
+
 ### Deployment pipeline (sealos-deploy)
 ```text
 Preflight → Mode Detection → DEPLOY or UPDATE
@@ -51,3 +54,5 @@ State is tracked in `.sealos/state.json` (deployment state), `.sealos/analysis.j
 - `skills/sealos-deploy/config.json` — OAuth client_id, regional Sealos URLs
 - `skills/sealos-deploy/scripts/` — auth, scoring, and helper automation scripts
 - `skills/sealos-deploy/evals/evals.json` — eval prompts and assertions
+- `.codex-plugin/plugin.json` — Codex plugin manifest pointing to root `skills/`
+- `.agents/plugins/marketplace.json` — local Codex marketplace entry for the Sealos plugin
