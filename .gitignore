@@ -5,4 +5,4 @@ skills/sealos-deploy-workspace/
 .sealos/analysis.json
 .sealos/build/
 
-docs
+/docs

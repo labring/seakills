@@ -2,7 +2,7 @@
 
 Deploy projects to [Sealos Cloud](https://gzg.sealos.run) from your AI agent.
 
-Seakills is a `skills.sh` skill pack centered on `/sealos-deploy`. It helps an agent inspect a project, prepare missing deployment artifacts, and ship it to Sealos Cloud.
+Seakills is both a `skills.sh` skill pack and a Codex plugin package centered on `/sealos-deploy`. It helps an agent inspect a project, prepare missing deployment artifacts, and ship it to Sealos Cloud.
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ Later runs can switch to an in-place update flow when an existing deployment is 
 
 ## Repository
 
-[`skills/`](/Users/jingyang/zjy365/demo/github-pack/seakills/skills) contains `/sealos-deploy` and the supporting skills it uses during the deploy flow.
+[`skills/`](/Users/jingyang/zjy365/demo/github-pack/seakills/skills) is the single source of truth for `/sealos-deploy` and the supporting skills it uses during the deploy flow. The same root-level skills directory serves both `skills.sh` installs and the Codex plugin declared by [`.codex-plugin/plugin.json`](/Users/jingyang/zjy365/demo/github-pack/seakills/.codex-plugin/plugin.json).
 
 ## License
 

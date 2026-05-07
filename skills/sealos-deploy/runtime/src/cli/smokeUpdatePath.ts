@@ -49,8 +49,8 @@ async function writeDeployFacts(
 
 function runStatusCommand(workDir: string) {
   return execFileSync(
-    process.execPath,
-    ["--import", "tsx", "src/cli/statusRun.ts", "--dir", workDir],
+    "pnpm",
+    ["exec", "tsx", "src/cli/statusRun.ts", "--dir", workDir],
     {
       cwd: PACKAGE_ROOT,
       encoding: "utf8",

@@ -43,8 +43,8 @@ async function writeLastDeployFixture(workDir: string, image = "ghcr.io/example/
 
 async function runStatusCommand(workDir: string) {
   return execFileSync(
-    process.execPath,
-    ["--import", "./node_modules/tsx/dist/loader.mjs", "src/cli/statusRun.ts", "--dir", workDir],
+    "pnpm",
+    ["exec", "tsx", "src/cli/statusRun.ts", "--dir", workDir],
     {
       cwd: PACKAGE_ROOT,
       encoding: "utf8",
