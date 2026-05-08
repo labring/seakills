@@ -639,6 +639,11 @@ If the project uses databases, also read:
 <SKILL_DIR>/../docker-to-sealos/references/database-templates.md
 ```
 
+If the project mentions Frappe, ERPNext, HRMS, or `bench`, also read:
+```
+<SKILL_DIR>/../docker-to-sealos/references/frappe-bench.md
+```
+
 ### 5.2 Generate Template
 
 Read `.sealos/analysis.json` and use `image_ref`, `port`, `databases`, and `env_vars` as inputs.
@@ -666,6 +671,7 @@ After generating the base template, check if the app needs its public URL config
 - Image tag: exact version, **never `:latest`**
 - PVC requests: `<= 1Gi`
 - Container defaults: `cpu: 200m/20m`, `memory: 256Mi/25Mi`
+- Init containers must define explicit resources; do not rely on namespace defaults. For expensive init work such as framework install, database migration, asset compilation, or `bench new-site`, allocate enough memory for the task.
 - `imagePullPolicy: IfNotPresent`
 - `revisionHistoryLimit: 1`
 - `automountServiceAccountToken: false`
@@ -914,6 +920,32 @@ On 201 success, the response contains:
 }
 ```
 Extract the instance name and present to user.
+
+### 6.3.1 Post-Deploy Readiness Verification
+
+After a 201 response, do not assume the app is usable. Verify Kubernetes readiness:
+
+```bash
+NAMESPACE=$(KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
+  config view --minify -o jsonpath='{.contexts[0].context.namespace}')
+
+KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
+  get pod,svc,endpoints,ingress -n "$NAMESPACE" -l app=<app-name>
+```
+
+For the public app Service, endpoints must be non-empty before the Ingress can serve traffic. If the URL returns `no healthy upstream` or HTTP 503:
+
+1. Check `endpoints/<app-name>`; empty endpoints means the backend Pod is not Ready.
+2. Check Pod init container status and previous logs:
+   ```bash
+   KUBECONFIG=~/.sealos/kubeconfig kubectl --insecure-skip-tls-verify \
+     logs pod/<pod> -n "$NAMESPACE" -c <init-container> --previous --tail=200
+   ```
+3. Look for common signatures:
+   - `OOMKilled` or exit `137`: increase init container memory and recreate the Pod.
+   - `Permission denied` on mounted paths: add `fsGroup` or a one-shot permission repair for existing PVCs.
+   - App-specific migration/bootstrap errors: repair the failed bootstrap state, then rerun the init path.
+4. Only report the app as usable after the endpoint exists and an HTTP request to the public URL returns a non-5xx response.
 
 ### 6.4 Fallback: kubectl apply (when Template API is unavailable)
 
