@@ -220,6 +220,8 @@ Load only needed references for current task:
   - Docker→Sealos field-level mappings and edge conversions
 - `references/database-templates.md`
   - database templates, RBAC structures, secret naming patterns
+- `references/frappe-bench.md`
+  - Frappe/ERPNext/HRMS/bench conversion patterns, init resources, idempotent site bootstrap, and common failure signatures
 - `references/example-guide.md`
   - examples and pattern walkthroughs (non-authoritative)
 - `references/rules-registry.yaml`
@@ -256,3 +258,4 @@ Load only needed references for current task:
 - Prefer gateway TLS termination in Sealos Ingress over in-container TLS: for dual-port HTTP/HTTPS workloads, keep HTTP service port and remove redundant HTTPS/certificate mounts unless official docs require HTTPS backend.
 - Prefer fixing references/examples over adding exceptions when conflicts appear.
 - If official Kubernetes installation docs/manifests exist for the target app, do not ignore them; use them to refine runtime semantics beyond Compose defaults.
+- If the project mentions Frappe, ERPNext, HRMS, or `bench`, load `references/frappe-bench.md` before generating app workloads.
