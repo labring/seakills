@@ -1505,6 +1505,118 @@ class CheckConsistencyTests(unittest.TestCase):
             )
             self.assertFalse(any(item.rule_id == "R027" for item in violations))
 
+    def test_detects_postgres_secret_ref_not_matching_cluster_name(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: apps.kubeblocks.io/v1alpha1
+                kind: Cluster
+                metadata:
+                  name: demo-postgres
+                  labels:
+                    kb.io/database: postgresql-16.4.0
+                    clusterdefinition.kubeblocks.io/name: postgresql
+                spec:
+                  clusterDefinitionRef: postgresql
+                  clusterVersionRef: postgresql-16.4.0
+                  componentSpecs: []
+                ---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: demo
+                  labels:
+                    cloud.sealos.io/app-deploy-manager: demo
+                  annotations:
+                    originImageName: ghcr.io/example/demo:1.0.0
+                spec:
+                  template:
+                    spec:
+                      automountServiceAccountToken: false
+                      containers:
+                        - name: demo
+                          image: ghcr.io/example/demo:1.0.0
+                          imagePullPolicy: IfNotPresent
+                          env:
+                            - name: POSTGRES_HOST
+                              valueFrom:
+                                secretKeyRef:
+                                  name: demo-pg-conn-credential
+                                  key: host
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertTrue(any(item.rule_id == "R037" for item in violations))
+
+    def test_detects_missing_cronjob_required_labels(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: batch/v1
+            kind: CronJob
+            metadata:
+              name: demo-task
+            spec:
+              schedule: "* * * * *"
+              jobTemplate:
+                spec:
+                  template:
+                    spec:
+                      containers:
+                        - name: demo-task
+                          image: nginx:1.27.2
+                          imagePullPolicy: IfNotPresent
+                      restartPolicy: OnFailure
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R036" for item in violations))
+
+    def test_allows_cronjob_required_labels(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: batch/v1
+            kind: CronJob
+            metadata:
+              name: demo-task
+              labels:
+                cloud.sealos.io/cronjob: demo-task
+                cronjob-launchpad-name: ""
+                cronjob-type: image
+            spec:
+              schedule: "* * * * *"
+              jobTemplate:
+                spec:
+                  template:
+                    spec:
+                      containers:
+                        - name: demo-task
+                          image: nginx:1.27.2
+                          imagePullPolicy: IfNotPresent
+                      restartPolicy: OnFailure
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R036" for item in violations))
+
     def test_ignores_latest_tag_in_negative_example_block(self):
         violations = self.run_checker(
             """
@@ -1639,6 +1751,132 @@ class CheckConsistencyTests(unittest.TestCase):
             """
         )
         self.assertFalse(any(item.rule_id == "R007" for item in violations))
+        self.assertFalse(any(item.rule_id == "R017" for item in violations))
+
+    def test_allows_new_mongodb_and_legacy_redis_secret_names(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                      env:
+                        - name: MONGO_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: ${{ defaults.app_name }}-mongo-mongodb-account-root
+                              key: password
+                        - name: REDIS_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: ${{ defaults.app_name }}-redis-account-default
+                              key: password
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R007" for item in violations))
+        self.assertFalse(any(item.rule_id == "R017" for item in violations))
+
+    def test_allows_redis_service_host_port_with_credential_secret(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                      env:
+                        - name: REDIS_HOST
+                          value: ${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local
+                        - name: REDIS_PORT
+                          value: "6379"
+                        - name: REDIS_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: ${{ defaults.app_name }}-redis-redis-account-default
+                              key: password
+                        - name: REDIS_URL
+                          value: redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R007" for item in violations))
+        self.assertFalse(any(item.rule_id == "R017" for item in violations))
+
+    def test_allows_mongodb_url_with_service_host_and_credential_secret(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                      env:
+                        - name: MONGO_USERNAME
+                          valueFrom:
+                            secretKeyRef:
+                              name: ${{ defaults.app_name }}-mongo-mongodb-account-root
+                              key: username
+                        - name: MONGO_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: ${{ defaults.app_name }}-mongo-mongodb-account-root
+                              key: password
+                        - name: MONGODB_URI
+                          value: mongodb://$(MONGO_USERNAME):$(MONGO_PASSWORD)@${{ defaults.app_name }}-mongo-mongodb.${{ SEALOS_NAMESPACE }}.svc:27017/demo?authSource=admin
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R007" for item in violations))
+        self.assertFalse(any(item.rule_id == "R017" for item in violations))
+
+    def test_ignores_known_non_database_connection_env_names(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                      env:
+                        - name: POSTGREST_URL
+                          value: http://postgrest:3000
+                        - name: PG_META_PORT
+                          value: "8080"
+                        - name: CODE_SANDBOX_URL
+                          value: http://sandbox:8080
+            ```
+            """
+        )
         self.assertFalse(any(item.rule_id == "R017" for item in violations))
 
     def test_detects_database_connection_env_without_secret_ref(self):
@@ -1879,6 +2117,32 @@ class CheckConsistencyTests(unittest.TestCase):
                           valueFrom:
                             secretKeyRef:
                               name: object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}
+                              key: bucket
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R007" for item in violations))
+
+    def test_allows_object_storage_bucket_secret_with_suffix(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                      env:
+                        - name: STORAGE_PUBLIC_BUCKET
+                          valueFrom:
+                            secretKeyRef:
+                              name: object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}-public
                               key: bucket
             ```
             """

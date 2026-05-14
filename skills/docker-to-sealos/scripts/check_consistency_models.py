@@ -21,7 +21,10 @@ DB_SECRET_SUFFIXES = (
     "-pg-conn-credential",
     "-mysql-conn-credential",
     "-mongodb-account-root",
+    "-mongo-mongodb-account-root",
+    "-mongodb-mongodb-account-root",
     "-redis-redis-account-default",
+    "-redis-account-default",
     "-broker-account-admin",
 )
 MAX_PVC_STORAGE_BYTES = 1024 ** 3  # 1Gi

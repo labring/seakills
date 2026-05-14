@@ -39,7 +39,7 @@ Extract from Docker Compose/docs:
 Infer and normalize:
 
 - app name, title, description, categories
-- official URL, gitRepo, icon source
+- official URL, gitRepo, icon source (prefer square/circular icon-first assets such as app icons, favicons, or avatars; avoid rectangular wordmark/text logos)
 - locale/i18n metadata
 
 ### Step 3: Plan resources in strict order
@@ -79,7 +79,14 @@ Apply field-level mappings from `references/conversion-mappings.md`, including:
 Always produce:
 
 - `template/<app-name>/index.yaml`
-- `template/<app-name>/logo.<ext>` when official icon is resolvable
+- `template/<app-name>/logo.<ext>` when official icon is resolvable, prioritizing square/circular icon-first artwork and avoiding rectangular wordmark/text logos
+
+Never create:
+
+- `template/<app-name>/README.md`
+- `template/<app-name>/README_zh.md`
+
+README authoring is out of scope for this skill. If the Template CR requires README URLs, populate URL fields in `index.yaml` only and leave file creation to a dedicated README skill.
 
 ### Step 7: Validate before output
 
@@ -93,9 +100,11 @@ If validation fails, fix template/rules/examples first.
 - Template `metadata.name` must be hardcoded lowercase; do not use `${{ defaults.app_name }}`.
 - Template CR folder name must match `metadata.name`.
 - Template CR must include required metadata fields (`title`, `url`, `gitRepo`, `author`, `description`, `icon`, `templateType`, `locale`, `i18n`, `categories`).
-- Template `spec.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README.md`.
-- Template `spec.i18n.zh.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README_zh.md`.
+- Template `spec.readme` must point to `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README.md`.
+- Template `spec.i18n.zh.readme` must point to `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README_zh.md`.
+- These README fields are URL references in `index.yaml` only; this skill must not create or update the referenced README files.
 - `icon` URL must point to template repo raw path for this app on `kb-0.9` branch.
+- `template/<app-name>/logo.<ext>` must use square/circular icon-first artwork (for example app icon/favicon/avatar), and must not use rectangular wordmark/text logos.
 - `i18n.zh.description` must be written in Simplified Chinese.
 - Omit `i18n.zh.title` when it is identical to `title`.
 - `categories` must only use predefined values (`tool`, `ai`, `game`, `database`, `low-code`, `monitor`, `dev-ops`, `blog`, `storage`, `frontend`, `backend`).
@@ -115,6 +124,7 @@ If validation fails, fix template/rules/examples first.
 - Application `Ingress` resources must use the same component name across `metadata.name`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and backend `service.name`.
 - Service `spec.ports[*].name` must be explicitly set (required for multi-port services).
 - HTTP Ingress must include required nginx annotations (`kubernetes.io/ingress.class`, `nginx.ingress.kubernetes.io/proxy-body-size`, `nginx.ingress.kubernetes.io/server-snippet`, `nginx.ingress.kubernetes.io/ssl-redirect`, `nginx.ingress.kubernetes.io/backend-protocol`, `nginx.ingress.kubernetes.io/client-body-buffer-size`, `nginx.ingress.kubernetes.io/proxy-buffer-size`, `nginx.ingress.kubernetes.io/proxy-send-timeout`, `nginx.ingress.kubernetes.io/proxy-read-timeout`, `nginx.ingress.kubernetes.io/configuration-snippet`) with expected defaults.
+- CronJob resources must define labels `cloud.sealos.io/cronjob`, `cronjob-launchpad-name`, and `cronjob-type`; `cloud.sealos.io/cronjob` must equal `metadata.name`, `cronjob-launchpad-name` must be `""`, and `cronjob-type` must be `image`.
 - When official application health checks are available, managed workloads must define `livenessProbe`, `readinessProbe`, and (for slow bootstrap apps) `startupProbe`, aligned with official endpoints/commands.
 
 ### Official Kubernetes alignment
@@ -143,7 +153,7 @@ If validation fails, fix template/rules/examples first.
 ### Env and secrets
 
 - Non-database sensitive values/inputs use direct `env[].value`.
-- Business containers must source database connection fields (`endpoint`, `host`, `port`, `username`, `password`) from approved Kubeblocks database secrets via `env[].valueFrom.secretKeyRef`.
+- Business containers must source database connection fields (`endpoint`, `host`, `port`, `username`, `password`) from approved Kubeblocks database secrets via `env[].valueFrom.secretKeyRef`; exception: Redis `host`/`port` may use Sealos Redis Service FQDN and `6379` when the Redis secret only exposes credentials, and MongoDB connection URLs may use the Sealos MongoDB Service FQDN plus `27017` when the MongoDB secret exposes credentials only.
 - Business containers must not use custom env/volume `Secret` references except approved Kubeblocks database secrets and object storage secrets.
 - A dedicated app-scoped registry pull Secret is allowed and should be referenced only through `template.spec.imagePullSecrets`.
 - Database connection/bootstrap may use Kubeblocks-provided secrets, and reserved Kubeblocks database secret names must not be redefined by custom `Secret` resources.
@@ -165,8 +175,8 @@ If validation fails, fix template/rules/examples first.
 - Redis cluster must follow upgraded structure (`componentDef: redis-7`, `componentDef: redis-sentinel-7`, `serviceVersion: 7.2.7`, main data PVC `1Gi`, topology `replication`).
 - Database cluster component resources must use `limits(cpu=500m,memory=512Mi)` and `requests(cpu=50m,memory=51Mi)` unless source docs explicitly require otherwise.
 - Secret naming:
-  - MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
-  - Redis: `${{ defaults.app_name }}-redis-redis-account-default`
+  - MongoDB: `${{ defaults.app_name }}-mongo-mongodb-account-root` (or `${{ defaults.app_name }}-mongodb-mongodb-account-root` when the MongoDB cluster name uses `-mongodb`)
+  - Redis: `${{ defaults.app_name }}-redis-redis-account-default` (legacy `${{ defaults.app_name }}-redis-account-default` may be accepted for backward compatibility)
   - Kafka: `${{ defaults.app_name }}-broker-account-admin`
   - Do not use legacy naming outside supported exceptions.
 
@@ -209,6 +219,8 @@ When conversion is complete, provide:
 2. target file path (`template/<app-name>/index.yaml`)
 3. complete template YAML
 4. key decisions only where ambiguity existed
+
+Do not create or output README content in this skill. README generation is delegated to another skill.
 
 ## Reference Navigation (Progressive Loading)
 
@@ -254,8 +266,10 @@ Load only needed references for current task:
 - Keep App resource in `spec.data.url` format; never use `spec.template`.
 - Keep App resource `spec.displayType: normal` and `spec.type: link`; do not infer alternative enum values.
 - Keep business-env, object storage, and DB-secret policy consistent with MUST rules.
+- Prefer square/circular icon-first logo assets (app icon/favicon/avatar) and avoid rectangular wordmark/text logos.
 - Prefer Sealos-managed ingress over bundled edge proxies: if a Traefik gateway is only acting as ingress/front-proxy and at least one business service exists, do not emit Traefik workload resources.
 - Prefer gateway TLS termination in Sealos Ingress over in-container TLS: for dual-port HTTP/HTTPS workloads, keep HTTP service port and remove redundant HTTPS/certificate mounts unless official docs require HTTPS backend.
+- Never create `template/<app-name>/README.md` or `template/<app-name>/README_zh.md`; only keep README URL references inside `index.yaml` when required by the template schema.
 - Prefer fixing references/examples over adding exceptions when conflicts appear.
 - If official Kubernetes installation docs/manifests exist for the target app, do not ignore them; use them to refine runtime semantics beyond Compose defaults.
 - If the project mentions Frappe, ERPNext, HRMS, or `bench`, load `references/frappe-bench.md` before generating app workloads.

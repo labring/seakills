@@ -18,6 +18,7 @@ from check_consistency_helpers_workload import (
     is_app_workload_document,
     iter_containers,
     iter_documents_by_kind,
+    iter_workload_secret_refs,
 )
 
 
@@ -71,6 +72,11 @@ HTTP_INGRESS_REQUIRED_ANNOTATIONS: Dict[str, str] = {
         "  add_header Cache-Control \"public\";\n"
         "}"
     ),
+}
+CRONJOB_LABEL_KEY = "cloud.sealos.io/cronjob"
+CRONJOB_REQUIRED_LABELS: Dict[str, str] = {
+    "cronjob-launchpad-name": "",
+    "cronjob-type": "image",
 }
 POSTGRES_URL_DATABASE_RE = re.compile(r"postgres(?:ql)?://[^/\s]+/([^?\s'\";]+)", re.IGNORECASE)
 DEFAULT_POSTGRES_DATABASE_NAMES = {"postgres", "template0", "template1"}
@@ -1096,6 +1102,67 @@ def _is_postgres_cluster_document(doc) -> bool:
     return False
 
 
+def _collect_postgres_expected_conn_secrets(artifact_docs) -> Dict[Path, set[str]]:
+    expected_by_path: Dict[Path, set[str]] = {}
+    for doc in artifact_docs:
+        if not _is_postgres_cluster_document(doc):
+            continue
+        metadata = doc.data.get("metadata") if isinstance(doc.data, dict) else None
+        cluster_name = metadata.get("name") if isinstance(metadata, dict) else None
+        if not isinstance(cluster_name, str) or not cluster_name.strip():
+            continue
+        expected_by_path.setdefault(doc.path, set()).add(f"{cluster_name.strip()}-conn-credential")
+    return expected_by_path
+
+
+def check_postgres_secret_refs_match_cluster_name(context: ScanContext) -> List[Violation]:
+    violations: List[Violation] = []
+
+    artifact_docs = [doc for doc in context.yaml_documents if _is_template_artifact_document(doc)]
+    if not artifact_docs:
+        return violations
+
+    expected_by_path = _collect_postgres_expected_conn_secrets(artifact_docs)
+    if not expected_by_path:
+        return violations
+
+    seen: set[tuple[Path, str]] = set()
+    for doc in artifact_docs:
+        if not isinstance(doc.data, dict):
+            continue
+        expected = expected_by_path.get(doc.path)
+        if not expected:
+            continue
+
+        for _, secret_name, _, secret_key in iter_workload_secret_refs(doc.data):
+            if not isinstance(secret_name, str) or not secret_name.endswith("-pg-conn-credential"):
+                continue
+            if secret_name in expected:
+                continue
+            if secret_key is not None and secret_key not in {"host", "port", "username", "password", "endpoint"}:
+                continue
+
+            marker = (doc.path, secret_name)
+            if marker in seen:
+                continue
+            seen.add(marker)
+
+            expected_list = ", ".join(sorted(expected))
+            add_doc_violation(
+                violations,
+                rule_id="R037",
+                doc=doc,
+                pattern=rf"^\s*name\s*:\s*{re.escape(secret_name)}\s*$",
+                default_pattern=r"^\s*env\s*:",
+                message=(
+                    f"PostgreSQL secret reference '{secret_name}' must match the "
+                    f"Cluster metadata.name-derived secret ({expected_list})"
+                ),
+            )
+
+    return violations
+
+
 def _extract_job_script(doc) -> str:
     if not isinstance(doc.data, dict):
         return ""
@@ -1355,6 +1422,58 @@ def check_official_health_probes(context: ScanContext) -> List[Violation]:
     return violations
 
 
+def check_cronjob_required_labels(context: ScanContext) -> List[Violation]:
+    violations: List[Violation] = []
+
+    for doc in iter_documents_by_kind(context, "CronJob"):
+        metadata = doc.data.get("metadata") if isinstance(doc.data, dict) else None
+        if not isinstance(metadata, dict):
+            continue
+        name = metadata.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+
+        labels = metadata.get("labels")
+        if not isinstance(labels, dict):
+            add_doc_violation(
+                violations,
+                rule_id="R036",
+                doc=doc,
+                pattern=r"^\s*labels\s*:",
+                default_pattern=r"^\s*metadata\s*:",
+                message=(
+                    "CronJob metadata.labels must define cloud.sealos.io/cronjob, "
+                    "cronjob-launchpad-name, and cronjob-type"
+                ),
+            )
+            continue
+
+        cronjob_label_value = labels.get(CRONJOB_LABEL_KEY)
+        if cronjob_label_value != name:
+            add_doc_violation(
+                violations,
+                rule_id="R036",
+                doc=doc,
+                pattern=re.escape(CRONJOB_LABEL_KEY),
+                default_pattern=r"^\s*labels\s*:",
+                message="CronJob label cloud.sealos.io/cronjob must exist and exactly match metadata.name",
+            )
+
+        for label_key, expected_value in CRONJOB_REQUIRED_LABELS.items():
+            if labels.get(label_key) == expected_value:
+                continue
+            add_doc_violation(
+                violations,
+                rule_id="R036",
+                doc=doc,
+                pattern=re.escape(label_key),
+                default_pattern=r"^\s*labels\s*:",
+                message=f"CronJob label {label_key} must exist and be set to {expected_value!r}",
+            )
+
+    return violations
+
+
 def check_revision_history_limit(context: ScanContext) -> List[Violation]:
     return check_managed_workload_setting(
         context,
@@ -1446,6 +1565,7 @@ APP_RULES: Dict[str, Rule] = {
     "R022": Rule("R022", check_template_i18n_zh_title_absent),
     "R023": Rule("R023", check_template_categories_allowed),
     "R024": Rule("R024", check_official_health_probes),
+    "R036": Rule("R036", check_cronjob_required_labels),
     "R015": Rule("R015", check_origin_image_name_matches_container),
     "R020": Rule("R020", check_service_ports_have_names),
     "R029": Rule("R029", check_service_labels_match_selector_app),
@@ -1453,6 +1573,7 @@ APP_RULES: Dict[str, Rule] = {
     "R031": Rule("R031", check_ingress_name_matches_backends),
     "R026": Rule("R026", check_http_ingress_annotations),
     "R027": Rule("R027", check_postgres_custom_db_init_job),
+    "R037": Rule("R037", check_postgres_secret_refs_match_cluster_name),
     "R008": Rule("R008", check_deploy_manager_label_match_name),
     "R034": Rule("R034", check_app_label_match_name),
     "R028": Rule("R028", check_container_names_match_workload_name),

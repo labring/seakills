@@ -18,7 +18,7 @@ APPROVED_DB_SECRET_PATTERN = re.compile(
 )
 OBJECT_STORAGE_BASE_SECRET_NAME = "object-storage-key"
 OBJECT_STORAGE_BUCKET_SECRET_PATTERN = re.compile(
-    rf"^object-storage-key-{SERVICE_ACCOUNT_PLACEHOLDER}-{APP_NAME_PLACEHOLDER}$"
+    rf"^object-storage-key-{SERVICE_ACCOUNT_PLACEHOLDER}-{APP_NAME_PLACEHOLDER}(?:-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*$"
 )
 OBJECT_STORAGE_BASE_ENV_NAMES: Set[str] = {
     "S3_ACCESS_KEY_ID",
@@ -39,13 +39,30 @@ DB_CONNECTION_INDICATOR_HINTS: Set[str] = {
     "REDIS",
     "KAFKA",
 }
+# These envs contain DB-related tokens (PG/URL/PORT) in names but are not
+# direct database connection fields and should not be forced to secretKeyRef.
+NON_DB_CONNECTION_ENV_EXACT: Set[str] = {
+    "STUDIO_PG_META_URL",
+    "POSTGREST_URL",
+    "POSTGREST_BASE_URL",
+    "PGRST_OPENAPI_SERVER_PROXY_URI",
+    "PG_META_PORT",
+    "CODE_SANDBOX_URL",
+    "SANDBOX_URL",
+}
 ENV_VALUE_REF_RE = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)")
 DB_COMPOSABLE_KEYS: Set[str] = {"endpoint", "host", "port", "username", "password"}
 REDIS_SERVICE_HOST_TEMPLATE_PATTERN = re.compile(
-    rf"^{APP_NAME_PLACEHOLDER}-redis-redis-redis\.\$\{{\{{\s*SEALOS_NAMESPACE\s*\}}\}}\.svc(?:\.cluster\.local)?$"
+    rf"^{APP_NAME_PLACEHOLDER}-redis-redis(?:-redis)?\.\$\{{\{{\s*SEALOS_NAMESPACE\s*\}}\}}\.svc(?:\.cluster\.local)?$"
 )
 REDIS_SERVICE_HOST_RUNTIME_PATTERN = re.compile(
-    r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.svc(?:\.cluster\.local)?$"
+    r"^[a-z0-9](?:[-a-z0-9]*redis[-a-z0-9]*)\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.svc(?:\.cluster\.local)?$"
+)
+MONGODB_SERVICE_HOST_TEMPLATE_PATTERN = re.compile(
+    rf"^{APP_NAME_PLACEHOLDER}-(?:mongo|mongodb)-mongodb\.\$\{{\{{\s*SEALOS_NAMESPACE\s*\}}\}}\.svc(?:\.cluster\.local)?$"
+)
+MONGODB_SERVICE_HOST_RUNTIME_PATTERN = re.compile(
+    r"^[a-z0-9](?:[-a-z0-9]*mongo(?:db)?[-a-z0-9]*)-mongodb\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?\.svc(?:\.cluster\.local)?$"
 )
 
 
@@ -59,7 +76,8 @@ def is_approved_object_storage_secret_ref(source: str, secret_name: str, env_nam
     if secret_name == OBJECT_STORAGE_BASE_SECRET_NAME:
         return env_name in OBJECT_STORAGE_BASE_ENV_NAMES
     if OBJECT_STORAGE_BUCKET_SECRET_PATTERN.fullmatch(secret_name):
-        return env_name in OBJECT_STORAGE_BUCKET_ENV_NAMES
+        normalized_env = normalize_env_name(env_name)
+        return normalized_env in OBJECT_STORAGE_BUCKET_ENV_NAMES or normalized_env.endswith("_BUCKET")
     return False
 
 
@@ -69,6 +87,8 @@ def normalize_env_name(env_name: str) -> str:
 
 def infer_db_connection_field(env_name: str) -> Optional[str]:
     upper = normalize_env_name(env_name)
+    if upper in NON_DB_CONNECTION_ENV_EXACT:
+        return None
     if not any(hint in upper for hint in DB_CONNECTION_INDICATOR_HINTS):
         return None
 
@@ -163,6 +183,18 @@ def is_redis_service_port(value: str) -> bool:
     return value.strip() == "6379"
 
 
+def is_mongodb_service_host(value: str) -> bool:
+    stripped = value.strip()
+    return (
+        MONGODB_SERVICE_HOST_TEMPLATE_PATTERN.fullmatch(stripped) is not None
+        or MONGODB_SERVICE_HOST_RUNTIME_PATTERN.fullmatch(stripped) is not None
+    )
+
+
+def is_mongodb_service_port(value: str) -> bool:
+    return value.strip() == "27017"
+
+
 def is_redis_host_from_env(
     env_item: Dict[str, object],
     env_items_by_name: Dict[str, Dict[str, object]],
@@ -251,6 +283,67 @@ def is_composed_redis_endpoint_from_service(
         if match is None:
             return False
         return is_redis_service_host(match.group(1)) and is_redis_service_port(match.group(2))
+
+    return has_host and has_port
+
+
+def is_composed_mongodb_endpoint_from_service(
+    env_item: Dict[str, object],
+    env_items_by_name: Dict[str, Dict[str, object]],
+) -> bool:
+    value = env_item.get("value")
+    if not isinstance(value, str):
+        return False
+    if not value.startswith("mongodb://"):
+        return False
+
+    ref_names = ENV_VALUE_REF_RE.findall(value)
+    has_host = False
+    has_port = False
+
+    match = re.search(r"mongodb://(?:[^:@]+(?::[^@]+)?@)?([^/:?]+):([0-9]+)", value)
+    if match is not None:
+        if is_mongodb_service_host(match.group(1)):
+            has_host = True
+        if is_mongodb_service_port(match.group(2)):
+            has_port = True
+
+    for ref_name in ref_names:
+        ref_env = env_items_by_name.get(ref_name)
+        if not isinstance(ref_env, dict):
+            return False
+
+        ref_secret = extract_secret_ref(ref_env)
+        if ref_secret is not None:
+            if not is_approved_db_secret_name(ref_secret["name"]):
+                return False
+            ref_key = ref_secret["key"]
+            if ref_key == "endpoint":
+                has_host = True
+                has_port = True
+            elif ref_key == "host":
+                has_host = True
+            elif ref_key == "port":
+                has_port = True
+            elif ref_key in {"username", "password"}:
+                pass
+            else:
+                return False
+            continue
+
+        resolved = resolve_env_value(ref_env.get("value"), env_items_by_name)
+        if not isinstance(resolved, str):
+            return False
+        if is_mongodb_service_host(resolved):
+            has_host = True
+            continue
+        if is_mongodb_service_port(resolved):
+            has_port = True
+            continue
+        normalized_ref = normalize_env_name(ref_name)
+        if normalized_ref.endswith("PASSWORD") or normalized_ref.endswith("USERNAME"):
+            continue
+        return False
 
     return has_host and has_port
 
@@ -384,6 +477,10 @@ def check_db_connection_env_secret_requirements(context: ScanContext) -> List[Vi
                 secret_ref = extract_secret_ref(env_item)
                 if secret_ref is None:
                     if is_allowed_redis_service_env(env_name, expected_key, env_item, env_items_by_name):
+                        continue
+                    if expected_key == "endpoint" and is_composed_mongodb_endpoint_from_service(
+                        env_item, env_items_by_name
+                    ):
                         continue
                     if expected_key == "endpoint" and is_composed_db_endpoint_from_secret(
                         env_item, env_items_by_name
