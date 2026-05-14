@@ -12,18 +12,26 @@ must_rules:
     enforcement:
       type: rule
       target: R012
-  - must: "Template `spec.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README.md`."
+  - must: "Template `spec.readme` must point to `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README.md`."
     enforcement:
       type: rule
       target: R025
-  - must: "Template `spec.i18n.zh.readme` must be `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README_zh.md`."
+  - must: "Template `spec.i18n.zh.readme` must point to `https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/<app-name>/README_zh.md`."
     enforcement:
       type: rule
       target: R025
+  - must: "These README fields are URL references in `index.yaml` only; this skill must not create or update the referenced README files."
+    enforcement:
+      type: manual
+      note: "Review file changes to ensure README files were not created or updated by this skill."
   - must: "`icon` URL must point to template repo raw path for this app on `kb-0.9` branch."
     enforcement:
       type: rule
       target: R014
+  - must: "`template/<app-name>/logo.<ext>` must use square/circular icon-first artwork (for example app icon/favicon/avatar), and must not use rectangular wordmark/text logos."
+    enforcement:
+      type: manual
+      note: "Review selected logo asset shape/content and reject rectangular wordmark/text logos."
   - must: "`i18n.zh.description` must be written in Simplified Chinese."
     enforcement:
       type: rule
@@ -88,6 +96,10 @@ must_rules:
     enforcement:
       type: rule
       target: R026
+  - must: "CronJob resources must define labels `cloud.sealos.io/cronjob`, `cronjob-launchpad-name`, and `cronjob-type`; `cloud.sealos.io/cronjob` must equal `metadata.name`, `cronjob-launchpad-name` must be `\"\"`, and `cronjob-type` must be `image`."
+    enforcement:
+      type: rule
+      target: R036
   - must: "When official application health checks are available, managed workloads must define `livenessProbe`, `readinessProbe`, and (for slow bootstrap apps) `startupProbe`, aligned with official endpoints/commands."
     enforcement:
       type: rule
@@ -152,7 +164,7 @@ must_rules:
     enforcement:
       type: manual
       note: "Sensitive-value classification requires semantic analysis of env names and source intent."
-  - must: "Business containers must source database connection fields (`endpoint`, `host`, `port`, `username`, `password`) from approved Kubeblocks database secrets via `env[].valueFrom.secretKeyRef`."
+  - must: "Business containers must source database connection fields (`endpoint`, `host`, `port`, `username`, `password`) from approved Kubeblocks database secrets via `env[].valueFrom.secretKeyRef`; exception: Redis `host`/`port` may use Sealos Redis Service FQDN and `6379` when the Redis secret only exposes credentials, and MongoDB connection URLs may use the Sealos MongoDB Service FQDN plus `27017` when the MongoDB secret exposes credentials only."
     enforcement:
       type: rule
       target: R017
@@ -224,11 +236,11 @@ must_rules:
     enforcement:
       type: rule
       target: R019
-  - must: "MongoDB: `${{ defaults.app_name }}-mongodb-account-root`"
+  - must: "MongoDB: `${{ defaults.app_name }}-mongo-mongodb-account-root` (or `${{ defaults.app_name }}-mongodb-mongodb-account-root` when the MongoDB cluster name uses `-mongodb`)"
     enforcement:
       type: rule
       target: R007
-  - must: "Redis: `${{ defaults.app_name }}-redis-redis-account-default`"
+  - must: "Redis: `${{ defaults.app_name }}-redis-redis-account-default` (legacy `${{ defaults.app_name }}-redis-account-default` may be accepted for backward compatibility)"
     enforcement:
       type: rule
       target: R007

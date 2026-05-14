@@ -572,19 +572,19 @@ subjects:
 
 The following specifications are consistent with the database upgrade documentation:
 
-- Database connection fields (`endpoint`/`host`/`port`/`username`/`password`) in application containers must be obtained via `secretKeyRef`
+- Database connection fields (`endpoint`/`host`/`port`/`username`/`password`) in application containers must be obtained via `secretKeyRef`; Redis host/port may use the Sealos Redis Service FQDN plus `6379` when the secret only exposes credentials, and MongoDB URLs may use the Sealos MongoDB Service FQDN plus `27017` when the secret only exposes credentials
 - PostgreSQL Cluster uses `postgresql-16.4.0` and includes `kb.io/database`, `disableExporter: true`, `enabledLogs: [running]`
 - Secret naming upgrades:
   - `xxx-redis-conn-credential` -> `xxx-redis-redis-account-default`
-  - `xxx-mongo-conn-credential` -> `xxx-mongodb-account-root`
+  - `xxx-mongo-conn-credential` -> `xxx-mongo-mongodb-account-root` (or `xxx-mongodb-mongodb-account-root` when the Cluster name uses `xxx-mongodb`)
   - `xxx-conn-credential` (kafka) -> `xxx-broker-account-admin`
 
 ### Secret Naming Conventions
 
 - PostgreSQL: `${{ defaults.app_name }}-pg-conn-credential`
 - MySQL: `${{ defaults.app_name }}-mysql-conn-credential`
-- MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
-- Redis: `${{ defaults.app_name }}-redis-redis-account-default`
+- MongoDB: `${{ defaults.app_name }}-mongo-mongodb-account-root` (or `${{ defaults.app_name }}-mongodb-mongodb-account-root` when the MongoDB Cluster name uses `${{ defaults.app_name }}-mongodb`)
+- Redis: `${{ defaults.app_name }}-redis-redis-account-default` (legacy `${{ defaults.app_name }}-redis-account-default` may be accepted for backward compatibility)
 - Kafka: `${{ defaults.app_name }}-broker-account-admin`
 
 **Important — Redis naming pattern:**
@@ -599,12 +599,16 @@ This same pattern applies to other databases (e.g., PostgreSQL service is `<app>
 
 ### Keys Included in Secrets
 
-All database secrets contain:
+PostgreSQL/MySQL/MongoDB/Kafka secrets usually contain:
 - `endpoint`: Full connection endpoint (host:port)
 - `host`: Hostname
 - `password`: Password
 - `port`: Port number
 - `username`: Username
+
+Redis default account secrets usually contain:
+- `username`
+- `password`
 
 ### Environment Variable Configuration Examples
 
@@ -649,49 +653,25 @@ env:
         name: ${{ defaults.app_name }}-mysql-conn-credential
         key: password
 
-  # MongoDB
-  - name: MONGO_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-mongodb-account-root
-        key: endpoint
-  - name: MONGO_HOST
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-mongodb-account-root
-        key: host
-  - name: MONGO_PORT
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-mongodb-account-root
-        key: port
+  # MongoDB (credential secret + fixed Service FQDN)
   - name: MONGO_USERNAME
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-mongodb-account-root
+        name: ${{ defaults.app_name }}-mongo-mongodb-account-root
         key: username
   - name: MONGO_PASSWORD
     valueFrom:
       secretKeyRef:
-        name: ${{ defaults.app_name }}-mongodb-account-root
+        name: ${{ defaults.app_name }}-mongo-mongodb-account-root
         key: password
+  - name: MONGODB_URI
+    value: mongodb://$(MONGO_USERNAME):$(MONGO_PASSWORD)@${{ defaults.app_name }}-mongo-mongodb.${{ SEALOS_NAMESPACE }}.svc:27017/app?authSource=admin
 
   # Redis
-  - name: REDIS_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-redis-account-default
-        key: endpoint
   - name: REDIS_HOST
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-redis-account-default
-        key: host
+    value: ${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local
   - name: REDIS_PORT
-    valueFrom:
-      secretKeyRef:
-        name: ${{ defaults.app_name }}-redis-redis-account-default
-        key: port
+    value: "6379"
   - name: REDIS_USERNAME
     valueFrom:
       secretKeyRef:

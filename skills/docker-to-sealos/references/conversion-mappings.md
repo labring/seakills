@@ -790,10 +790,24 @@ spec:
                   name: object-storage-key
                   key: secretKey
             - name: S3_BUCKET
-              valueFrom:
-                secretKeyRef:
-                  name: object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}
-                  key: bucket
+    valueFrom:
+      secretKeyRef:
+        name: object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}
+        key: bucket
+```
+
+Bucket-scoped object-storage secrets may append an additional lowercase suffix when one app needs multiple bucket values, for example `object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}-public`. Env names ending in `_BUCKET` may reference those bucket-scoped secrets.
+
+## CronJob Mapping
+
+Any generated `CronJob` must include Sealos cron labels:
+
+```yaml
+metadata:
+  labels:
+    cloud.sealos.io/cronjob: <metadata.name>
+    cronjob-launchpad-name: ""
+    cronjob-type: image
 ```
 
 ## Common Patterns Summary

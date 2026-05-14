@@ -55,6 +55,9 @@ rules:
   - id: R024
     description: Workloads with official health checks must define livenessProbe/readinessProbe and startupProbe using official endpoints/commands.
     severity: error
+  - id: R036
+    description: CronJob resources must define cloud.sealos.io/cronjob, cronjob-launchpad-name, and cronjob-type labels with required values.
+    severity: error
   - id: R015
     description: Managed app workload originImageName must match a declared container image.
     severity: error
@@ -65,10 +68,10 @@ rules:
     description: All containers must explicitly set imagePullPolicy to IfNotPresent.
     severity: error
   - id: R007
-    description: Env/volume Secret usage must follow approved database/object-storage policy, and Kubeblocks reserved database secret names must not be overridden.
+    description: Env/volume Secret usage must follow approved database/object-storage policy, including database secret naming variants and bucket-scoped object-storage secrets, and Kubeblocks reserved database secret names must not be overridden.
     severity: error
   - id: R017
-    description: Database connection env fields (endpoint/host/port/username/password) in business workloads must use approved Kubeblocks database secretKeyRef entries, or (for endpoint/URL fields) compose values only from env vars sourced from approved DB secretKeyRef keys.
+    description: Database connection env fields (endpoint/host/port/username/password) in business workloads must use approved Kubeblocks database secretKeyRef entries, except Redis host/port may use Sealos Redis Service FQDN and port 6379, MongoDB URLs may use Sealos MongoDB Service FQDN and port 27017, and endpoint/URL fields may compose values from approved DB secretKeyRef env vars.
     severity: error
   - id: R019
     description: Database cluster component resources must use limits cpu=500m/memory=512Mi and requests cpu=50m/memory=51Mi.
@@ -81,6 +84,9 @@ rules:
     severity: error
   - id: R027
     description: Template artifacts using non-default PostgreSQL database names must define a robust pg-init Job (readiness wait plus idempotent create).
+    severity: error
+  - id: R037
+    description: PostgreSQL Cluster metadata.name must align with referenced *-pg-conn-credential secret names in the same template artifact.
     severity: error
   - id: R008
     description: App workload cloud.sealos.io/app-deploy-manager label must exist and match metadata.name.

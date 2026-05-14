@@ -596,7 +596,7 @@ env:
 ### Notes
 
 1. `object-storage-key` is a fixed secret name (does not include the application name)
-2. Only the bucket's secret name includes the application name: `object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}`
+2. Only the bucket's secret name includes the application name: `object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}`. Bucket-scoped variants may append a lowercase suffix, for example `object-storage-key-${{ SEALOS_SERVICE_ACCOUNT }}-${{ defaults.app_name }}-public`.
 3. S3_ENDPOINT and S3_PUBLIC_DOMAIN use environment variable references: `$(BACKEND_STORAGE_MINIO_EXTERNAL_ENDPOINT)`
 4. S3_ENABLE_PATH_STYLE must be set to "1"
 
@@ -707,10 +707,10 @@ env:
 
 ### Other Databases
 
-Other databases (Redis, MySQL, MongoDB) follow a similar pattern:
-- Redis: `${{ defaults.app_name }}-redis-redis-account-default`
+Other databases follow the same approved secret policy, with service-FQDN exceptions where KubeBlocks only exposes credentials:
+- Redis: `${{ defaults.app_name }}-redis-redis-account-default` (legacy `${{ defaults.app_name }}-redis-account-default` may be accepted); host/port may use `${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local` and `6379`
 - MySQL: `${{ defaults.app_name }}-mysql-conn-credential`
-- MongoDB: `${{ defaults.app_name }}-mongodb-account-root`
+- MongoDB: `${{ defaults.app_name }}-mongo-mongodb-account-root` (or `${{ defaults.app_name }}-mongodb-mongodb-account-root` when the Cluster name uses `${{ defaults.app_name }}-mongodb`); MongoDB URLs may use `${{ defaults.app_name }}-mongo-mongodb.${{ SEALOS_NAMESPACE }}.svc:27017`
 
 ### PostgreSQL Database Initialization
 

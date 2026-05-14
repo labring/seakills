@@ -755,9 +755,10 @@ class ComposeToTemplateTests(unittest.TestCase):
             deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
             env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
             redis_host = next(item for item in env if item["name"] == "REDIS_HOST")
-            secret_ref = redis_host.get("valueFrom", {}).get("secretKeyRef", {})
-            self.assertEqual("${{ defaults.app_name }}-redis-redis-account-default", secret_ref.get("name"))
-            self.assertEqual("host", secret_ref.get("key"))
+            self.assertEqual(
+                "${{ defaults.app_name }}-redis-redis-redis.${{ SEALOS_NAMESPACE }}.svc.cluster.local",
+                redis_host.get("value"),
+            )
 
     def test_generates_mysql_cluster_resources_and_secret_env_mapping(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -843,8 +844,50 @@ class ComposeToTemplateTests(unittest.TestCase):
             env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
             mongo_host = next(item for item in env if item["name"] == "MONGO_HOST")
             host_ref = mongo_host.get("valueFrom", {}).get("secretKeyRef", {})
-            self.assertEqual("${{ defaults.app_name }}-mongodb-account-root", host_ref.get("name"))
+            self.assertEqual("${{ defaults.app_name }}-mongo-mongodb-account-root", host_ref.get("name"))
             self.assertEqual("host", host_ref.get("key"))
+
+    def test_composes_mongodb_url_with_service_host_and_credential_secret(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: ghcr.io/example/demo:1.0.0
+                    environment:
+                      MONGODB_URI: mongodb://root:password@mongo:27017/demo?authSource=admin
+                  mongo:
+                    image: mongo:8.0.4
+                """,
+            )
+            index_path, _ = convert_compose_to_template(
+                compose_path=compose,
+                output_root=root / "template",
+                meta=self._meta("demo"),
+            )
+            docs = parse_yaml_documents(index_path)
+            deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
+            env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+
+            host = next(item for item in env if item["name"] == "SEALOS_MONGODB_MONGODB_HOST")
+            port = next(item for item in env if item["name"] == "SEALOS_MONGODB_MONGODB_PORT")
+            username = next(item for item in env if item["name"] == "SEALOS_MONGODB_MONGODB_USERNAME")
+            password = next(item for item in env if item["name"] == "SEALOS_MONGODB_MONGODB_PASSWORD")
+            uri = next(item for item in env if item["name"] == "MONGODB_URI")
+
+            self.assertEqual("${{ defaults.app_name }}-mongo-mongodb.${{ SEALOS_NAMESPACE }}.svc.cluster.local", host["value"])
+            self.assertEqual("27017", port["value"])
+            self.assertEqual("${{ defaults.app_name }}-mongo-mongodb-account-root", username["valueFrom"]["secretKeyRef"]["name"])
+            self.assertEqual("username", username["valueFrom"]["secretKeyRef"]["key"])
+            self.assertEqual("${{ defaults.app_name }}-mongo-mongodb-account-root", password["valueFrom"]["secretKeyRef"]["name"])
+            self.assertEqual("password", password["valueFrom"]["secretKeyRef"]["key"])
+            self.assertEqual(
+                "mongodb://$(SEALOS_MONGODB_MONGODB_USERNAME):$(SEALOS_MONGODB_MONGODB_PASSWORD)@$(SEALOS_MONGODB_MONGODB_HOST):$(SEALOS_MONGODB_MONGODB_PORT)/demo?authSource=admin",
+                uri["value"],
+            )
 
     def test_generates_kafka_cluster_resources_and_secret_env_mapping(self):
         with tempfile.TemporaryDirectory() as temp_dir:
