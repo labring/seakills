@@ -102,6 +102,26 @@ Prefer the plugin install for Codex and Claude Code because it:
 - keeps the plugin metadata, logo, prompts, commands, and capabilities together
 - avoids maintaining a separate packaged copy of the skills
 
+## Plugin Distribution
+
+The Codex integration follows [OpenAI's Codex plugin build guide](https://developers.openai.com/codex/plugins/build):
+
+- `.codex-plugin/plugin.json` contains plugin identity, discovery metadata, interface copy, default prompts, brand metadata, and asset paths relative to the repository root.
+- `.agents/plugins/marketplace.json` registers this repo-local plugin for local Codex marketplace testing.
+- `distribution/platforms.json` records platform support claims and evidence.
+- `marketplaces/README.md` owns marketplace rules and prevents command-support overclaims.
+- `scripts/validate-codex-plugin.py` validates the Codex manifest, repo marketplace, platform registry, and asset paths.
+- `skills/**/SKILL.md` remains the only skill source; do not add a second packaged copy of the skills.
+
+Validate plugin metadata before publishing or pushing manifest changes:
+
+```bash
+python3 scripts/validate-codex-plugin.py
+python3 -m json.tool .codex-plugin/plugin.json >/dev/null
+python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
+python3 -m json.tool distribution/platforms.json >/dev/null
+```
+
 ## How Setup Works
 
 You only need a plugin-compatible or `skills.sh` compatible AI agent and a project to deploy.
@@ -163,6 +183,8 @@ Important distribution files:
 - [`openclaw.plugin.json`](./openclaw.plugin.json) — OpenClaw / ClawHub bundle pointer
 - [`commands/sealos.md`](./commands/sealos.md) — `/sealos` plugin command entry for compatible hosts
 - [`distribution/platforms.json`](./distribution/platforms.json) — platform support registry
+- [`marketplaces/README.md`](./marketplaces/README.md) — marketplace rules and support-claim ownership
+- [`scripts/validate-codex-plugin.py`](./scripts/validate-codex-plugin.py) — Codex plugin validation
 
 Do not add a second packaged copy of the skills. Root `skills/**` is the only skill source for all installation paths.
 
