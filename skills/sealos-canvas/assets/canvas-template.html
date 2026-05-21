@@ -7,20 +7,24 @@
   <link rel="icon" href="data:,">
   <style>
     :root {
-      --bg: #111019;
-      --panel: #171620;
-      --panel-2: #1e1d29;
-      --panel-3: #242230;
-      --border: rgba(255, 255, 255, 0.13);
-      --muted: #a09dab;
-      --text: #f7f5fb;
+      --bg: oklch(12% 0.018 292);
+      --panel: oklch(16% 0.018 292);
+      --panel-2: oklch(19% 0.02 292);
+      --panel-3: oklch(23% 0.022 292);
+      --line: rgba(255, 255, 255, 0.075);
+      --border: rgba(255, 255, 255, 0.11);
+      --muted: oklch(72% 0.026 292);
+      --quiet: oklch(55% 0.025 292);
+      --text: oklch(95% 0.012 292);
       --accent: #6c55ff;
       --radius: 8px;
-      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --ready: #74d7a6;
-      --warning: #f4be5e;
-      --failed: #ff7a90;
-      --sleeping: #6ad6aa;
+      --font: "Avenir Next", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ready: oklch(79% 0.12 163);
+      --warning: oklch(81% 0.13 78);
+      --failed: oklch(72% 0.17 18);
+      --sleeping: oklch(77% 0.12 176);
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+      --shadow-elevated: 0 18px 46px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.045);
     }
 
     * {
@@ -35,9 +39,13 @@
       overflow: hidden;
       color: var(--text);
       font-family: var(--font);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       background:
-        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.16) 1px, transparent 0) 0 0 / 35px 35px,
-        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0) 17px 17px / 35px 35px,
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 140px 140px,
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 140px 140px,
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.18) 1px, transparent 0) 0 0 / 28px 28px,
         var(--bg);
     }
 
@@ -49,12 +57,13 @@
 
     button {
       border: 0;
+      touch-action: manipulation;
     }
 
     .app-shell {
       display: grid;
-      grid-template-rows: 76px minmax(0, 1fr) 150px;
-      grid-template-columns: minmax(0, 1fr) 360px;
+      grid-template-rows: 68px minmax(0, 1fr) 132px;
+      grid-template-columns: minmax(0, 1fr) 344px;
       width: 100vw;
       height: 100vh;
     }
@@ -64,11 +73,10 @@
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 18px;
-      padding: 14px 18px 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(17, 16, 25, 0.76);
-      backdrop-filter: blur(12px);
+      gap: 20px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      background: color-mix(in oklch, var(--bg) 88%, black 12%);
       z-index: 30;
     }
 
@@ -76,18 +84,26 @@
       display: flex;
       min-width: 0;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
 
     .identity-mark {
       display: grid;
       place-items: center;
-      width: 42px;
-      height: 42px;
-      border: 1px solid var(--border);
+      width: 40px;
+      height: 40px;
+      border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
       border-radius: var(--radius);
       color: var(--accent);
-      background: rgba(255, 255, 255, 0.04);
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), rgba(255, 255, 255, 0.025));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .identity-mark svg {
+      width: 23px;
+      height: 23px;
+      stroke: currentColor;
     }
 
     .identity-text {
@@ -97,9 +113,9 @@
     h1 {
       margin: 0;
       color: var(--text);
-      font-size: 18px;
+      font-size: 17px;
       line-height: 1.2;
-      font-weight: 760;
+      font-weight: 720;
       letter-spacing: 0;
       white-space: nowrap;
       overflow: hidden;
@@ -109,9 +125,9 @@
     .summary-line {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 9px;
       min-width: 0;
-      margin-top: 6px;
+      margin-top: 5px;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.3;
@@ -127,7 +143,7 @@
     }
 
     .summary-line a {
-      color: rgba(247, 245, 251, 0.86);
+      color: color-mix(in oklch, var(--text) 84%, var(--accent) 16%);
       text-decoration: none;
     }
 
@@ -135,34 +151,54 @@
       display: inline-flex;
       align-items: center;
       flex: 0 0 auto;
-      height: 22px;
-      padding: 0 8px;
-      border: 1px solid rgba(116, 215, 166, 0.32);
+      height: 20px;
+      padding: 0 7px;
+      border: 1px solid color-mix(in srgb, var(--ready) 36%, transparent);
       border-radius: 999px;
       color: var(--ready);
-      background: rgba(116, 215, 166, 0.08);
-      font-size: 11px;
-      font-weight: 680;
+      background: color-mix(in srgb, var(--ready) 10%, transparent);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: 0.01em;
     }
 
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.025);
     }
 
     .toolbar button {
-      width: 38px;
-      height: 38px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: rgba(23, 22, 32, 0.88);
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      color: color-mix(in oklch, var(--text) 82%, var(--muted) 18%);
+      background: transparent;
       cursor: pointer;
+      transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 160ms var(--ease);
     }
 
-    .toolbar button:hover {
-      border-color: rgba(255, 255, 255, 0.28);
-      background: rgba(31, 30, 43, 0.95);
+    @media (hover: hover) {
+      .toolbar button:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.075);
+      }
+    }
+
+    .toolbar button:active {
+      transform: scale(0.96);
+    }
+
+    .toolbar button:focus-visible,
+    .node:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent) 72%, white 28%);
+      outline-offset: 2px;
     }
 
     .canvas-region {
@@ -173,6 +209,9 @@
       min-height: 0;
       overflow: hidden;
       cursor: grab;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 34%),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.016), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.012));
     }
 
     .canvas-region.dragging {
@@ -195,35 +234,72 @@
 
     .edge {
       fill: none;
-      stroke: rgba(170, 166, 184, 0.48);
-      stroke-width: 1.8;
-      stroke-dasharray: 7 8;
+      stroke: rgba(174, 169, 191, 0.42);
+      stroke-width: 1.45;
+      stroke-dasharray: 6 8;
+      stroke-linecap: round;
     }
 
     .edge.strong {
-      stroke: rgba(116, 215, 166, 0.58);
+      stroke: color-mix(in srgb, var(--ready) 64%, rgba(255, 255, 255, 0.22));
       stroke-dasharray: none;
     }
 
+    .edge-label-bg {
+      fill: color-mix(in oklch, var(--bg) 82%, black 18%);
+      stroke: var(--line);
+      stroke-width: 1px;
+    }
+
+    .arrow-head {
+      fill: rgba(174, 169, 191, 0.68);
+    }
+
     .edge-label {
-      fill: rgba(214, 210, 225, 0.76);
-      font-size: 12px;
+      fill: rgba(231, 228, 240, 0.78);
+      font-size: 11px;
+      font-weight: 680;
       paint-order: stroke;
-      stroke: rgba(17, 16, 25, 0.9);
-      stroke-width: 4px;
     }
 
     .node {
       position: absolute;
       width: 390px;
       min-height: 166px;
-      border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(23, 22, 32, 0.97), rgba(20, 19, 29, 0.97));
-      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+      color: inherit;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+        var(--panel);
+      box-shadow: var(--shadow-elevated);
+      outline: 1px solid var(--border);
+      outline-offset: -1px;
       overflow: hidden;
       text-align: left;
       cursor: pointer;
+      transition: transform 180ms var(--ease), outline-color 180ms var(--ease), background-color 180ms var(--ease);
+    }
+
+    .node::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 2px;
+      background: color-mix(in srgb, var(--accent) 62%, transparent);
+      opacity: 0.62;
+    }
+
+    .node::after {
+      content: "";
+      position: absolute;
+      top: 74px;
+      right: -5px;
+      width: 9px;
+      height: 9px;
+      border: 1px solid color-mix(in srgb, var(--accent) 64%, transparent);
+      border-radius: 999px;
+      background: var(--bg);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
     }
 
     .node.small {
@@ -232,37 +308,56 @@
     }
 
     .node.selected {
-      border-color: rgba(255, 255, 255, 0.42);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 24px 70px rgba(0, 0, 0, 0.28);
+      outline-color: color-mix(in srgb, var(--accent) 72%, white 28%);
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+        0 24px 62px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.065);
+      transform: translateY(-2px);
     }
 
     .node.warning {
-      border-color: rgba(244, 190, 94, 0.42);
+      outline-color: color-mix(in srgb, var(--warning) 42%, transparent);
+    }
+
+    .node.warning::before {
+      background: var(--warning);
     }
 
     .node.failed {
-      border-color: rgba(255, 122, 144, 0.48);
+      outline-color: color-mix(in srgb, var(--failed) 48%, transparent);
+    }
+
+    .node.failed::before {
+      background: var(--failed);
+    }
+
+    .node.sleeping::before {
+      background: var(--sleeping);
     }
 
     .node-header {
       display: grid;
-      grid-template-columns: 36px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 13px;
       align-items: center;
-      padding: 26px 28px 16px;
+      padding: 24px 24px 13px;
     }
 
     .icon {
       display: grid;
       place-items: center;
-      width: 32px;
-      height: 32px;
-      color: var(--accent);
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 7px;
+      color: color-mix(in srgb, var(--accent) 80%, white 20%);
+      background: rgba(255, 255, 255, 0.04);
     }
 
     .icon svg {
-      width: 28px;
-      height: 28px;
+      width: 22px;
+      height: 22px;
       stroke: currentColor;
     }
 
@@ -273,10 +368,10 @@
     .title strong {
       display: block;
       color: var(--text);
-      font-size: 21px;
+      font-size: 20px;
       line-height: 1.2;
-      font-weight: 760;
-      letter-spacing: 0;
+      font-weight: 740;
+      letter-spacing: -0.012em;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -284,8 +379,8 @@
 
     .subtitle {
       margin-top: 5px;
-      color: var(--muted);
-      font-size: 15px;
+      color: var(--quiet);
+      font-size: 13px;
       line-height: 1.3;
       white-space: nowrap;
       overflow: hidden;
@@ -293,41 +388,52 @@
     }
 
     .node-body {
-      padding: 20px 28px 24px;
+      padding: 16px 24px 22px;
     }
 
     .status {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 13px;
+      gap: 9px;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid color-mix(in srgb, var(--ready) 28%, transparent);
+      border-radius: 999px;
       color: var(--ready);
-      font-size: 17px;
+      background: color-mix(in srgb, var(--ready) 8%, transparent);
+      font-size: 13px;
       line-height: 1.3;
-      font-weight: 560;
+      font-weight: 680;
     }
 
     .status.warning {
       color: var(--warning);
+      border-color: color-mix(in srgb, var(--warning) 32%, transparent);
+      background: color-mix(in srgb, var(--warning) 8%, transparent);
     }
 
     .status.failed {
       color: var(--failed);
+      border-color: color-mix(in srgb, var(--failed) 32%, transparent);
+      background: color-mix(in srgb, var(--failed) 8%, transparent);
     }
 
     .status.sleeping {
       color: var(--sleeping);
+      border-color: color-mix(in srgb, var(--sleeping) 32%, transparent);
+      background: color-mix(in srgb, var(--sleeping) 8%, transparent);
     }
 
     .status svg {
-      width: 21px;
-      height: 21px;
+      width: 17px;
+      height: 17px;
       stroke: currentColor;
     }
 
     .meta {
       display: grid;
-      gap: 7px;
-      margin-top: 16px;
+      gap: 8px;
+      margin-top: 18px;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.35;
@@ -338,27 +444,29 @@
       justify-content: space-between;
       gap: 16px;
       min-width: 0;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.055);
     }
 
     .meta-row span:last-child {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      color: rgba(234, 231, 240, 0.84);
+      color: color-mix(in oklch, var(--text) 84%, var(--muted) 16%);
     }
 
     .attachments {
-      border-top: 1px solid rgba(255, 255, 255, 0.09);
-      background: rgba(255, 255, 255, 0.025);
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .attachment {
       display: grid;
-      grid-template-columns: 54px minmax(0, 1fr);
+      grid-template-columns: 48px minmax(0, 1fr);
       align-items: center;
-      min-height: 58px;
+      min-height: 52px;
       color: var(--muted);
-      font-size: 15px;
+      font-size: 13px;
       border-top: 1px solid rgba(255, 255, 255, 0.05);
     }
 
@@ -370,7 +478,7 @@
       display: grid;
       place-items: center;
       height: 100%;
-      background: rgba(255, 255, 255, 0.035);
+      background: rgba(255, 255, 255, 0.04);
     }
 
     .attachment svg {
@@ -391,23 +499,26 @@
       grid-row: 2 / 4;
       min-width: 0;
       min-height: 0;
-      border-left: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(17, 16, 25, 0.82);
-      backdrop-filter: blur(12px);
+      border-left: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 26%),
+        color-mix(in oklch, var(--bg) 88%, black 12%);
       overflow: auto;
     }
 
     .panel-section {
-      padding: 18px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 18px 18px 20px;
+      border-bottom: 1px solid var(--line);
     }
 
     .panel-section h2 {
       margin: 0 0 12px;
-      font-size: 13px;
+      color: var(--quiet);
+      font-size: 11px;
       line-height: 1.2;
       font-weight: 760;
-      color: rgba(247, 245, 251, 0.88);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .detail-title {
@@ -416,28 +527,29 @@
     }
 
     .detail-title strong {
-      font-size: 20px;
+      font-size: 22px;
       line-height: 1.2;
+      letter-spacing: -0.012em;
       overflow-wrap: anywhere;
     }
 
     .detail-title span {
-      color: var(--muted);
+      color: var(--quiet);
       font-size: 13px;
       overflow-wrap: anywhere;
     }
 
     .detail-list {
       display: grid;
-      gap: 9px;
+      gap: 0;
       margin: 0;
     }
 
     .detail-row {
       display: grid;
       gap: 4px;
-      padding: 10px 0;
-      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 11px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.065);
       font-size: 12px;
       line-height: 1.35;
     }
@@ -448,11 +560,12 @@
 
     .detail-row dt {
       color: var(--muted);
+      letter-spacing: 0.01em;
     }
 
     .detail-row dd {
       margin: 0;
-      color: rgba(247, 245, 251, 0.88);
+      color: color-mix(in oklch, var(--text) 86%, var(--muted) 14%);
       overflow-wrap: anywhere;
     }
 
@@ -460,36 +573,38 @@
       grid-column: 1;
       grid-row: 3;
       min-width: 0;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(17, 16, 25, 0.72);
-      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--line);
+      background: color-mix(in oklch, var(--bg) 90%, black 10%);
       overflow: hidden;
     }
 
     .events-panel h2 {
       margin: 0;
       padding: 13px 18px 0;
-      font-size: 13px;
+      color: var(--quiet);
+      font-size: 11px;
       font-weight: 760;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .events {
       display: grid;
       grid-auto-flow: column;
-      grid-auto-columns: minmax(260px, 380px);
-      gap: 14px;
+      grid-auto-columns: minmax(260px, 360px);
+      gap: 10px;
       overflow-x: auto;
-      padding: 12px 18px 16px;
+      padding: 12px 18px 14px;
     }
 
     .event {
       display: grid;
       gap: 5px;
-      min-height: 76px;
-      padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.09);
+      min-height: 74px;
+      padding: 12px 12px 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.075);
       border-radius: var(--radius);
-      background: rgba(255, 255, 255, 0.035);
+      background: rgba(255, 255, 255, 0.028);
       font-size: 12px;
       line-height: 1.35;
     }
@@ -504,10 +619,24 @@
       overflow-wrap: anywhere;
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
     @media (max-width: 980px) {
       .app-shell {
-        grid-template-rows: 82px minmax(0, 1fr) 210px;
+        grid-template-rows: auto minmax(0, 1fr) 210px;
         grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        grid-template-columns: 1fr;
+        align-items: start;
       }
 
       .topbar,
@@ -517,6 +646,31 @@
       }
 
       .detail-panel {
+        display: none;
+      }
+
+      .toolbar {
+        justify-self: start;
+      }
+
+      .summary-line {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 5px 8px;
+        white-space: normal;
+      }
+
+      .summary-line span,
+      .summary-line a {
+        white-space: nowrap;
+      }
+
+      .summary-line a {
+        grid-column: 1 / -1;
+      }
+
+      #generated-at {
         display: none;
       }
     }
@@ -538,10 +692,10 @@
         </div>
       </div>
       <nav class="toolbar" aria-label="Canvas controls">
-        <button type="button" data-action="fit" title="Fit view">⌖</button>
-        <button type="button" data-action="zoom-out" title="Zoom out">−</button>
-        <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-        <button type="button" data-action="reset" title="Reset view">↺</button>
+        <button type="button" data-action="fit" title="Fit view" aria-label="Fit view">⌖</button>
+        <button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button type="button" data-action="reset" title="Reset view" aria-label="Reset view">↺</button>
       </nav>
     </header>
 
@@ -550,7 +704,7 @@
         <svg class="edges" id="edges" aria-hidden="true">
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(170, 166, 184, 0.64)"></path>
+              <path class="arrow-head" d="M 0 0 L 10 5 L 0 10 z"></path>
             </marker>
           </defs>
         </svg>
@@ -651,7 +805,10 @@
         const pathData = `M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`;
         const labelX = (start.x + end.x) / 2;
         const labelY = (start.y + end.y) / 2 - 8;
+        const safeLabel = escapeHtml(edge.label || '');
+        const labelWidth = Math.max(48, safeLabel.length * 7 + 22);
         return `<path class="edge ${edge.strong ? 'strong' : ''}" marker-end="url(#arrow)" d="${pathData}"></path>
+          <rect class="edge-label-bg" x="${labelX - labelWidth / 2}" y="${labelY - 16}" width="${labelWidth}" height="22" rx="6"></rect>
           <text class="edge-label" x="${labelX}" y="${labelY}" text-anchor="middle">${escapeHtml(edge.label || '')}</text>`;
       }).join('');
       edgesSvg.innerHTML = defs + edgeMarkup;

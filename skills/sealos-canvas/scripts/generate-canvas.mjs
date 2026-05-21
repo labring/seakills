@@ -267,7 +267,7 @@ function extractTheme(workDir) {
   const theme = {
     accent: '#6c55ff',
     radius: '8px',
-    font: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    font: '"Avenir Next", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
   }
 
   const files = [
@@ -642,12 +642,12 @@ function layoutGraph(graph) {
     ingress: [80, 80],
     app: [520, 120],
     service: [520, 390],
-    pods: [960, 120],
+    pods: [980, 120],
     config: [80, 390],
     secrets: [80, 630],
-    storage: [960, 390]
+    storage: [980, 390]
   }
-  const fallback = [[520, 630], [960, 630], [1400, 120], [1400, 390]]
+  const fallback = [[520, 630], [980, 630], [1440, 120], [1440, 390]]
   let fallbackIndex = 0
 
   for (const node of graph.nodes) {
