@@ -84,26 +84,6 @@
       display: flex;
       min-width: 0;
       align-items: center;
-      gap: 12px;
-    }
-
-    .identity-mark {
-      display: grid;
-      place-items: center;
-      width: 40px;
-      height: 40px;
-      border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
-      border-radius: var(--radius);
-      color: var(--accent);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), rgba(255, 255, 255, 0.025));
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    }
-
-    .identity-mark svg {
-      width: 23px;
-      height: 23px;
-      stroke: currentColor;
     }
 
     .identity-text {
@@ -680,7 +660,6 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="identity">
-        <div class="identity-mark" data-icon="app"></div>
         <div class="identity-text">
           <h1 id="app-title"></h1>
           <div class="summary-line">
@@ -776,7 +755,6 @@
     }
 
     function renderHeader() {
-      document.querySelector('[data-icon="app"]').innerHTML = icons.app;
       setText('app-title', model.app.name);
       setText('app-status', model.app.status);
       setText('app-namespace', model.app.namespace);
