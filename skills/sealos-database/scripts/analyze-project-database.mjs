@@ -43,10 +43,10 @@ const signals = [
     confidence: 4,
     patterns: [
       /\bpostgres(?:ql)?:\/\//i,
-      /\bDATABASE_URL\b/i,
       /\bPOSTGRES(?:QL)?_/i,
+      /\bprovider\s*=\s*["']postgres(?:ql)?["']/i,
+      /["']postgres(?:ql)?["']\s*:\s*\{/i,
       /\bpg\b/,
-      /@prisma\/client/i,
       /drizzle-orm\/node-postgres/i,
       /postgresql/i,
       /psycopg/i
@@ -70,8 +70,9 @@ const signals = [
       /\bmysql:\/\//i,
       /\bMYSQL_/i,
       /\bmysql2\b/i,
-      /\bprisma.*mysql/i,
-      /\bDATABASE_URL\b/i
+      /\bprovider\s*=\s*["']mysql["']/i,
+      /["']mysql["']\s*:\s*\{/i,
+      /\bprisma.*mysql/i
     ]
   },
   {
