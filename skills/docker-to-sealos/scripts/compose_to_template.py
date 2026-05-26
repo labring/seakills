@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
@@ -11,10 +12,12 @@ import shlex
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
-from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
 
 import yaml
 
@@ -169,6 +172,9 @@ CATEGORY_ALIASES = {
     "machine-learning": "ai",
 }
 TEMPLATE_README_BASE = "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template"
+SVGL_API_BASE = "https://api.svgl.app"
+SVGL_REQUEST_TIMEOUT = 10
+SVGL_LOGO_EXT = "svg"
 HTTP_INGRESS_ANNOTATIONS = {
     "kubernetes.io/ingress.class": "nginx",
     "nginx.ingress.kubernetes.io/proxy-body-size": "32m",
@@ -233,6 +239,7 @@ class MetadataOptions:
     author: str
     categories: Sequence[str]
     repo_raw_base: str
+    logo_ext: str = "png"
 
 
 @dataclass(frozen=True)
@@ -253,6 +260,146 @@ def normalize_k8s_name(raw: str) -> str:
     if not value:
         raise ValueError(f"unable to derive a valid name from: {raw!r}")
     return value
+
+
+def _normalize_search_text(raw: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", raw.lower())
+
+
+def _logo_search_terms(meta: MetadataOptions) -> List[str]:
+    terms = [meta.title, meta.app_name.replace("-", " ")]
+    for url in (meta.url, meta.git_repo):
+        parsed = urlparse(url)
+        host = parsed.netloc.lower().removeprefix("www.")
+        if host:
+            terms.append(host.split(".")[0])
+        path_name = Path(parsed.path).stem
+        if path_name:
+            terms.append(path_name.replace("-", " "))
+
+    unique: List[str] = []
+    seen = set()
+    for term in terms:
+        normalized = re.sub(r"\s+", " ", term.strip())
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(normalized)
+    return unique
+
+
+def _read_json_url(url: str, timeout: int = SVGL_REQUEST_TIMEOUT) -> Any:
+    request = Request(url, headers={"User-Agent": "docker-to-sealos/1.0"})
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _read_text_url(url: str, timeout: int = SVGL_REQUEST_TIMEOUT) -> str:
+    request = Request(url, headers={"User-Agent": "docker-to-sealos/1.0"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8")
+
+
+def _select_svg_route(route: Any) -> str:
+    if isinstance(route, str) and route.lower().endswith(".svg"):
+        return route
+    if isinstance(route, dict):
+        for key in ("light", "dark"):
+            value = route.get(key)
+            if isinstance(value, str) and value.lower().endswith(".svg"):
+                return value
+        for value in route.values():
+            if isinstance(value, str) and value.lower().endswith(".svg"):
+                return value
+    return ""
+
+
+def _score_svgl_result(
+    result: Mapping[str, Any],
+    meta: MetadataOptions,
+    term: str,
+) -> Tuple[int, int, str]:
+    title = str(result.get("title") or "")
+    url = str(result.get("url") or result.get("brandUrl") or "")
+    title_key = _normalize_search_text(title)
+    term_key = _normalize_search_text(term)
+    app_key = _normalize_search_text(meta.app_name)
+    meta_title_key = _normalize_search_text(meta.title)
+
+    score = 0
+    if title_key and title_key == term_key:
+        score += 120
+    elif title_key and term_key and (title_key in term_key or term_key in title_key):
+        score += 70
+    if title_key and title_key in {app_key, meta_title_key}:
+        score += 90
+
+    parsed_meta = urlparse(meta.url)
+    parsed_result = urlparse(url)
+    meta_host = parsed_meta.netloc.lower().removeprefix("www.")
+    result_host = parsed_result.netloc.lower().removeprefix("www.")
+    if meta_host and result_host:
+        hosts_match = (
+            meta_host == result_host
+            or meta_host.endswith(f".{result_host}")
+            or result_host.endswith(f".{meta_host}")
+        )
+        if hosts_match:
+            score += 100
+
+    route = _select_svg_route(result.get("route"))
+    if route:
+        score += 20
+    return score, -len(title_key), route
+
+
+def find_svgl_logo_url(meta: MetadataOptions) -> str:
+    best: Tuple[int, int, str] = (0, 0, "")
+    for term in _logo_search_terms(meta):
+        search_url = f"{SVGL_API_BASE}?search={quote(term)}"
+        try:
+            payload = _read_json_url(search_url)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, list):
+            continue
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            score = _score_svgl_result(item, meta, term)
+            if score[2] and score > best:
+                best = score
+    return best[2]
+
+
+def fetch_svgl_logo(meta: MetadataOptions, output_path: Path) -> bool:
+    logo_url = find_svgl_logo_url(meta)
+    if not logo_url:
+        return False
+    try:
+        svg_text = _read_text_url(logo_url)
+    except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, OSError):
+        return False
+    if "<svg" not in svg_text[:500].lower():
+        return False
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(svg_text, encoding="utf-8")
+    return True
+
+
+def prepare_logo_asset(meta: MetadataOptions, app_dir: Path, enabled: bool) -> MetadataOptions:
+    if not enabled:
+        return meta
+    logo_path = app_dir / f"logo.{SVGL_LOGO_EXT}"
+    if fetch_svgl_logo(meta, logo_path):
+        return replace(meta, logo_ext=SVGL_LOGO_EXT)
+    existing_logo = next(iter(sorted(app_dir.glob("logo.*"))), None)
+    if existing_logo is not None and existing_logo.suffix:
+        return replace(meta, logo_ext=existing_logo.suffix.lstrip("."))
+    return meta
 
 
 def has_pinned_image(image: str) -> bool:
@@ -1103,7 +1250,7 @@ def build_template_resource(meta: MetadataOptions) -> Dict[str, Any]:
             "author": meta.author,
             "description": meta.description,
             "readme": f"{readme_base}/README.md",
-            "icon": f"{meta.repo_raw_base}/template/{meta.app_name}/logo.png",
+            "icon": f"{meta.repo_raw_base}/template/{meta.app_name}/logo.{meta.logo_ext}",
             "templateType": "inline",
             "locale": "en",
             "i18n": {
@@ -2088,7 +2235,7 @@ def build_app_resource(meta: MetadataOptions) -> Dict[str, Any]:
                 "url": "https://${{ defaults.app_host }}.${{ SEALOS_CLOUD_DOMAIN }}",
             },
             "displayType": "normal",
-            "icon": f"{meta.repo_raw_base}/template/{meta.app_name}/logo.png",
+            "icon": f"{meta.repo_raw_base}/template/{meta.app_name}/logo.{meta.logo_ext}",
             "name": meta.title,
             "type": "link",
         },
@@ -2252,10 +2399,13 @@ def convert_compose_to_template(
     meta: MetadataOptions,
     kompose_shapes: Optional[Mapping[str, ServiceShape]] = None,
     write_files: bool = True,
+    fetch_logo: bool = True,
 ) -> Tuple[Path, str]:
     compose_data = parse_compose(compose_path)
-    documents = build_documents(compose_data, meta, kompose_shapes=kompose_shapes)
     app_dir = output_root / meta.app_name
+    if write_files:
+        meta = prepare_logo_asset(meta, app_dir, fetch_logo)
+    documents = build_documents(compose_data, meta, kompose_shapes=kompose_shapes)
     index_path = app_dir / "index.yaml"
     rendered = render_index_yaml(documents)
     if write_files:
@@ -2286,6 +2436,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default="always",
         help="Use kompose-generated workload shapes: always (required, default), auto (best effort), never (disable)",
     )
+    parser.add_argument(
+        "--no-fetch-logo",
+        action="store_true",
+        help="Disable default svgl.app SVG logo search and keep the fallback logo path",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print index.yaml content without writing files")
     return parser.parse_args(argv)
 
@@ -2308,6 +2463,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             meta=meta,
             kompose_shapes=kompose_shapes,
             write_files=not args.dry_run,
+            fetch_logo=not args.no_fetch_logo,
         )
     except ValueError as exc:
         raise SystemExit(f"ERROR: {exc}") from exc

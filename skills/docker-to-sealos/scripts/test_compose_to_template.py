@@ -17,6 +17,7 @@ from compose_to_template import (
     ServiceShape,
     build_zh_description,
     convert_compose_to_template,
+    find_svgl_logo_url,
     infer_metadata,
     parse_args,
     resolve_image_reference,
@@ -47,6 +48,13 @@ def render_registry(include_paths: Optional[List[str]] = None) -> str:
 
 
 class ComposeToTemplateTests(unittest.TestCase):
+    def setUp(self):
+        self._svgl_json_patcher = mock.patch("compose_to_template._read_json_url", return_value=[])
+        self._svgl_json_patcher.start()
+
+    def tearDown(self):
+        self._svgl_json_patcher.stop()
+
     def _meta(self, app_name: str = "demo") -> MetadataOptions:
         return MetadataOptions(
             app_name=app_name,
@@ -162,6 +170,198 @@ class ComposeToTemplateTests(unittest.TestCase):
                 additional_include_paths=[str(index_path)],
             )
             self.assertEqual([], violations)
+
+
+    def test_uses_svgl_svg_logo_when_available(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: nginx:1.27.2
+                """,
+            )
+
+            with mock.patch("compose_to_template._read_json_url") as read_json:
+                with mock.patch("compose_to_template._read_text_url", return_value='<svg viewBox="0 0 24 24"></svg>'):
+                    read_json.return_value = [
+                        {
+                            "title": "Nginx",
+                            "route": "https://svgl.app/library/nginx.svg",
+                            "url": "https://nginx.org/",
+                        }
+                    ]
+                    index_path, _ = convert_compose_to_template(
+                        compose_path=compose,
+                        output_root=root / "template",
+                        meta=self._meta("nginx"),
+                        fetch_logo=True,
+                    )
+
+            docs = parse_yaml_documents(index_path)
+            template = next(doc for doc in docs if doc.get("kind") == "Template")
+            app = next(doc for doc in docs if doc.get("kind") == "App")
+            self.assertEqual(
+                "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/nginx/logo.svg",
+                template["spec"]["icon"],
+            )
+            self.assertEqual(template["spec"]["icon"], app["spec"]["icon"])
+            self.assertEqual('<svg viewBox="0 0 24 24"></svg>', (root / "template" / "nginx" / "logo.svg").read_text())
+
+    def test_fetches_svgl_logo_by_default(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: nginx:1.27.2
+                """,
+            )
+
+            with mock.patch("compose_to_template._read_json_url") as read_json:
+                with mock.patch("compose_to_template._read_text_url", return_value='<svg viewBox="0 0 24 24"></svg>'):
+                    read_json.return_value = [
+                        {
+                            "title": "Nginx",
+                            "route": "https://svgl.app/library/nginx.svg",
+                            "url": "https://nginx.org/",
+                        }
+                    ]
+                    index_path, _ = convert_compose_to_template(
+                        compose_path=compose,
+                        output_root=root / "template",
+                        meta=self._meta("nginx"),
+                    )
+
+            docs = parse_yaml_documents(index_path)
+            template = next(doc for doc in docs if doc.get("kind") == "Template")
+            self.assertEqual(
+                "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/nginx/logo.svg",
+                template["spec"]["icon"],
+            )
+
+    def test_can_disable_default_svgl_logo_search(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: nginx:1.27.2
+                """,
+            )
+
+            with mock.patch("compose_to_template._read_json_url") as read_json:
+                index_path, _ = convert_compose_to_template(
+                    compose_path=compose,
+                    output_root=root / "template",
+                    meta=self._meta("nginx"),
+                    fetch_logo=False,
+                )
+
+            read_json.assert_not_called()
+            docs = parse_yaml_documents(index_path)
+            template = next(doc for doc in docs if doc.get("kind") == "Template")
+            self.assertEqual(
+                "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/nginx/logo.png",
+                template["spec"]["icon"],
+            )
+
+    def test_keeps_png_icon_path_when_svgl_search_misses(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: ghcr.io/example/demo:1.0.0
+                """,
+            )
+
+            with mock.patch("compose_to_template._read_json_url", return_value=[]):
+                index_path, _ = convert_compose_to_template(
+                    compose_path=compose,
+                    output_root=root / "template",
+                    meta=self._meta("demo"),
+                    fetch_logo=True,
+                )
+
+            docs = parse_yaml_documents(index_path)
+            template = next(doc for doc in docs if doc.get("kind") == "Template")
+            self.assertEqual(
+                "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/demo/logo.png",
+                template["spec"]["icon"],
+            )
+            self.assertFalse((root / "template" / "demo" / "logo.svg").exists())
+
+    def test_uses_existing_logo_extension_when_svgl_search_misses(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            compose = root / "docker-compose.yml"
+            output_dir = root / "template"
+            write_file(
+                compose,
+                """
+                services:
+                  app:
+                    image: ghcr.io/example/demo:1.0.0
+                """,
+            )
+            write_file(output_dir / "demo" / "logo.webp", "webp")
+
+            with mock.patch("compose_to_template._read_json_url", return_value=[]):
+                index_path, _ = convert_compose_to_template(
+                    compose_path=compose,
+                    output_root=output_dir,
+                    meta=self._meta("demo"),
+                    fetch_logo=True,
+                )
+
+            docs = parse_yaml_documents(index_path)
+            template = next(doc for doc in docs if doc.get("kind") == "Template")
+            self.assertEqual(
+                "https://raw.githubusercontent.com/labring-actions/templates/kb-0.9/template/demo/logo.webp",
+                template["spec"]["icon"],
+            )
+
+    def test_find_svgl_logo_url_prefers_matching_title_and_domain(self):
+        meta = MetadataOptions(
+            app_name="open-webui",
+            title="Open WebUI",
+            description="Demo app",
+            url="https://openwebui.com/",
+            git_repo="https://github.com/open-webui/open-webui",
+            author="Sealos",
+            categories=("ai",),
+            repo_raw_base="https://raw.githubusercontent.com/labring-actions/templates/kb-0.9",
+        )
+
+        def fake_read_json(url):
+            return [
+                {
+                    "title": "Open WebUI Docs",
+                    "route": "https://svgl.app/library/openwebui-docs.svg",
+                    "url": "https://docs.openwebui.com/",
+                },
+                {
+                    "title": "Open WebUI",
+                    "route": "https://svgl.app/library/openwebui.svg",
+                    "url": "https://openwebui.com/",
+                },
+            ]
+
+        with mock.patch("compose_to_template._read_json_url", side_effect=fake_read_json):
+            self.assertEqual("https://svgl.app/library/openwebui.svg", find_svgl_logo_url(meta))
 
     def test_service_ports_always_include_names_for_multi_port_services(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -983,6 +1183,10 @@ class ComposeToTemplateTests(unittest.TestCase):
     def test_parse_args_defaults_to_always_kompose_mode(self):
         args = parse_args(["--compose", "docker-compose.yml"])
         self.assertEqual("always", args.kompose_mode)
+
+    def test_parse_args_supports_disabling_default_logo_fetch(self):
+        args = parse_args(["--compose", "docker-compose.yml", "--no-fetch-logo"])
+        self.assertTrue(args.no_fetch_logo)
 
     def test_infer_metadata_normalizes_categories_to_allowlist(self):
         args = parse_args(
