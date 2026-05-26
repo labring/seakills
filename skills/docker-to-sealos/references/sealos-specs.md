@@ -903,145 +903,126 @@ spec:
 
 ### Resource Limit Configuration
 
-**Important: The resources field of all containers must include both requests and limits!**
+**Important: The resources field of all containers must include both requests and limits.**
 
-All containers in application Deployments or StatefulSets must have resource quotas configured:
+All containers in application Deployments or StatefulSets must use the fixed Sealos resource ladder. Do not invent intermediate values during template generation or resource tuning.
 
-```yaml
-containers:
-  - name: ${{ defaults.app_name }}
-    image: example/app:1.0.0
-    imagePullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 100m      # Minimum CPU request (required)
-        memory: 128Mi  # Minimum memory request (required)
-      limits:
-        cpu: 500m      # CPU upper limit (required)
-        memory: 512Mi  # Memory upper limit (required)
-```
+Allowed `limits.cpu` values use canonical Kubernetes quantities:
 
-**Quota setting guidelines**:
+- `100m` (0.1 core)
+- `200m` (0.2 core)
+- `500m` (0.5 core)
+- `1`
+- `2`
+- `3`
+- `4`
+- `8`
 
-1. **Lightweight frontend applications** (static file serving, simple web applications):
-   ```yaml
-   resources:
-     requests:
-       cpu: 20m
-       memory: 25Mi
-     limits:
-       cpu: 200m
-       memory: 256Mi
-   ```
+Allowed `limits.memory` values:
 
-2. **Standard backend applications** (API services, medium-load applications):
-   ```yaml
-   resources:
-     requests:
-       cpu: 100m
-       memory: 256Mi
-     limits:
-       cpu: 1000m
-       memory: 1Gi
-   ```
+- `128Mi`
+- `256Mi`
+- `512Mi`
+- `1024Mi`
+- `2G`
+- `4G`
+- `8G`
+- `16G`
 
-3. **Heavy-load applications** (AI processing, video processing, big data processing):
-   ```yaml
-   resources:
-     requests:
-       cpu: 500m
-       memory: 512Mi
-     limits:
-       cpu: 2000m
-       memory: 2Gi
-   ```
+`requests` must be derived from `limits` by dropping the last numeric digit:
 
-4. **AI/Machine Learning applications** (requiring GPU or large computational resources):
-   ```yaml
-   resources:
-     requests:
-       cpu: 1000m
-       memory: 1Gi
-     limits:
-       cpu: 4000m
-       memory: 4Gi
-   ```
+| limits | requests |
+|--------|----------|
+| `cpu: 100m` | `cpu: 10m` |
+| `cpu: 200m` | `cpu: 20m` |
+| `cpu: 500m` | `cpu: 50m` |
+| `cpu: 1` | `cpu: 100m` |
+| `cpu: 2` | `cpu: 200m` |
+| `cpu: 3` | `cpu: 300m` |
+| `cpu: 4` | `cpu: 400m` |
+| `cpu: 8` | `cpu: 800m` |
+| `memory: 128Mi` | `memory: 12Mi` |
+| `memory: 256Mi` | `memory: 25Mi` |
+| `memory: 512Mi` | `memory: 51Mi` |
+| `memory: 1024Mi` | `memory: 102Mi` |
+| `memory: 2G` | `memory: 200Mi` |
+| `memory: 4G` | `memory: 400Mi` |
+| `memory: 8G` | `memory: 800Mi` |
+| `memory: 16G` | `memory: 1600Mi` |
 
-**Quota setting explanation**:
-
-- **requests (request values)**: The minimum resources guaranteed for the container
-  - CPU uses `m` units (1000m = 1 CPU core)
-  - Memory uses `Mi` or `Gi` units
-  - Recommendation: Set requests to 70-80% of actual usage
-
-- **limits (limit values)**: The maximum resources the container can use
-  - CPU can burst up to the limit value
-  - Memory exceeding the limit will trigger OOM Kill
-  - Recommendation: Set limits to 2-4 times the requests
-
-**Golden rules for quota settings**:
-
-1. **Always set both requests and limits**
-   - Incorrect: Setting only requests may lead to resource starvation
-   - Incorrect: Setting only limits may cause scheduling failures
-   - Correct: Setting both guarantees performance and stability
-
-2. **Reasonable requests/limits ratio**
-   - CPU: limits can be 2-10 times the requests (CPU is compressible)
-   - Memory: limits should be 1.5-2 times the requests (memory is incompressible)
-
-3. **Adjust based on application type**
-   - Compute-intensive: Increase CPU quota
-   - Memory-intensive: Increase memory quota
-   - I/O-intensive: Balance CPU and memory
-
-4. **Monitor and adjust**
-   - Use conservative quotas for initial deployment
-   - Monitor actual resource usage
-   - Dynamically adjust based on monitoring data
-
-**Comparison examples**:
+**Default lightweight application quota:**
 
 ```yaml
-# Incorrect: No resource limits
-containers:
-  - name: app
-    image: app:1.0.0
-    imagePullPolicy: IfNotPresent
-
-# Incorrect: Only requests
-containers:
-  - name: app
-    image: app:1.0.0
-    imagePullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-
-# Incorrect: Only limits
-containers:
-  - name: app
-    image: app:1.0.0
-    imagePullPolicy: IfNotPresent
-    resources:
-      limits:
-        cpu: 500m
-        memory: 512Mi
-
-# Correct: Both requests and limits are present
-containers:
-  - name: app
-    image: app:1.0.0
-    imagePullPolicy: IfNotPresent
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
+resources:
+  requests:
+    cpu: 20m
+    memory: 25Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
 ```
+
+**Standard backend or broker quota after validation:**
+
+```yaml
+resources:
+  requests:
+    cpu: 50m
+    memory: 51Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+**Heavy workload quota:**
+
+```yaml
+resources:
+  requests:
+    cpu: 200m
+    memory: 200Mi
+  limits:
+    cpu: 2
+    memory: 2G
+```
+
+**Invalid examples:**
+
+```yaml
+# Incorrect: non-ladder values
+resources:
+  requests:
+    cpu: 30m
+    memory: 160Mi
+  limits:
+    cpu: 300m
+    memory: 384Mi
+
+# Incorrect: requests copied from old ratio guidance instead of deriving from limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1
+    memory: 1024Mi
+
+# Incorrect: decimal G form is not the canonical 1G-class ladder value
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  limits:
+    cpu: 1
+    memory: 1G
+```
+
+**Tuning guidance:**
+
+1. Move only between allowed `limits` ladder values.
+2. Recompute `requests` from the selected `limits`; do not preserve old requests.
+3. If a StatefulSet fails readiness at a lower resource tier, recreate or cleanly roll the Pod before testing the next tier so a stale non-ready Pod is not mistaken for the next tier's result.
+4. Choose the lowest tier that becomes Ready and passes application-level probes.
 
 ## Image Configuration Specification
 

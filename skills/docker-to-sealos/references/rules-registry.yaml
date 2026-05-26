@@ -76,6 +76,9 @@ rules:
   - id: R019
     description: Database cluster component resources must use limits cpu=500m/memory=512Mi and requests cpu=50m/memory=51Mi.
     severity: error
+  - id: R038
+    description: Managed workload container resources must use allowed Sealos limits ladder values and derive requests from limits.
+    severity: error
   - id: R020
     description: Service spec.ports entries must define non-empty name fields in template artifacts.
     severity: error

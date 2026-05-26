@@ -17,9 +17,10 @@ Do not mix these models blindly. If a repo's `docker/docker-compose.yml` uses `f
 
 - Database services from Compose (`mariadb`, `mysql`, `redis`) should follow the Sealos database strategy. Redis must use the KubeBlocks Redis `Cluster` and its generated Secret (`${{ defaults.app_name }}-redis-redis-account-default`) unless the user explicitly asks for raw containers.
 - If using a prebuilt Frappe image with mounted `sites` and `logs` PVCs, set pod `securityContext.fsGroup: 1000` so the `frappe` user can write mounted volumes.
-- Init containers that run `bench init`, `bench new-site`, `bench migrate`, or app install steps must set explicit resources. Do not rely on namespace defaults; `64Mi` memory is too small. Use at least:
-  - light config init: `requests.memory: 128Mi`, `limits.memory: 256Mi`
-  - `bench new-site` / app install / migrate: `requests.memory: 512Mi`, `limits.memory: 2Gi`
+- Init containers that run `bench init`, `bench new-site`, `bench migrate`, or app install steps must set explicit resources from the Sealos ladder. Do not rely on namespace defaults; `64Mi` memory is too small. Use at least:
+  - light config init: `limits.memory: 256Mi`, `requests.memory: 25Mi`
+  - `bench new-site` / app install / migrate: `limits.memory: 2G`, `requests.memory: 200Mi`
+  - choose matching ladder CPU values and derive CPU requests the same way, for example `limits.cpu: 500m` → `requests.cpu: 50m`
 - Bootstrap scripts must be idempotent and recover from partial initialization:
   - create `sites/common_site_config.json` if a fresh PVC hides the image's bundled file
   - use `bench new-site --force` for first-site creation when the database may contain residue from a previous failed attempt

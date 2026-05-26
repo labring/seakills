@@ -12,6 +12,8 @@ from check_consistency_models import (
     MAX_PVC_STORAGE_BYTES,
     Rule,
     ScanContext,
+    SEALOS_CPU_REQUEST_BY_LIMIT,
+    SEALOS_MEMORY_REQUEST_BY_LIMIT,
     Violation,
 )
 from check_consistency_parser import find_line
@@ -106,6 +108,130 @@ def check_pvc_storage_limit(context: ScanContext) -> List[Violation]:
                         path=doc.path,
                         line=line,
                         message="PVC storage request must be <= 1Gi",
+                    )
+                )
+
+    return violations
+
+
+def _display_allowed(values: Dict[str, str]) -> str:
+    return "/".join(values.keys())
+
+
+def _resource_line(doc, key: str, value) -> int:
+    if value is None:
+        return find_line(doc, rf"^\s*{re.escape(key)}\s*:", default=find_line(doc, r"^\s*resources\s*:"))
+    return find_line(
+        doc,
+        rf"^\s*{re.escape(key)}\s*:\s*['\"]?{re.escape(str(value))}['\"]?\s*$",
+        default=find_line(doc, r"^\s*resources\s*:"),
+    )
+
+
+def check_managed_workload_resource_ladder(context: ScanContext) -> List[Violation]:
+    violations: List[Violation] = []
+    for doc in context.yaml_documents:
+        if doc.skip_checks or not isinstance(doc.data, dict):
+            continue
+        if doc.path.name != "index.yaml":
+            continue
+        if doc.data.get("kind") not in {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}:
+            continue
+
+        for container in iter_containers(doc.data):
+            image = container.get("image")
+            if not isinstance(image, str) or not image.strip():
+                continue
+
+            name = str(container.get("name", "<unknown>"))
+            resources = container.get("resources")
+            if not isinstance(resources, dict):
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=find_line(doc, rf"^\s*name\s*:\s*{re.escape(name)}\s*$"),
+                        message=f"container {name} must define resources limits/requests from the Sealos ladder",
+                    )
+                )
+                continue
+
+            limits = resources.get("limits")
+            requests = resources.get("requests")
+            if not isinstance(limits, dict):
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=find_line(doc, r"^\s*resources\s*:"),
+                        message=f"container {name} must define resources.limits from the Sealos ladder",
+                    )
+                )
+                continue
+            if not isinstance(requests, dict):
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=find_line(doc, r"^\s*resources\s*:"),
+                        message=f"container {name} must define resources.requests derived from limits",
+                    )
+                )
+                continue
+
+            cpu_limit = str(limits.get("cpu", "")).strip()
+            memory_limit = str(limits.get("memory", "")).strip()
+            if cpu_limit not in SEALOS_CPU_REQUEST_BY_LIMIT:
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=_resource_line(doc, "cpu", limits.get("cpu")),
+                        message=(
+                            f"container {name} limits.cpu must use Sealos ladder "
+                            f"({_display_allowed(SEALOS_CPU_REQUEST_BY_LIMIT)})"
+                        ),
+                    )
+                )
+            if memory_limit not in SEALOS_MEMORY_REQUEST_BY_LIMIT:
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=_resource_line(doc, "memory", limits.get("memory")),
+                        message=(
+                            f"container {name} limits.memory must use Sealos ladder "
+                            f"({_display_allowed(SEALOS_MEMORY_REQUEST_BY_LIMIT)})"
+                        ),
+                    )
+                )
+
+            expected_cpu_request = SEALOS_CPU_REQUEST_BY_LIMIT.get(cpu_limit)
+            expected_memory_request = SEALOS_MEMORY_REQUEST_BY_LIMIT.get(memory_limit)
+            actual_cpu_request = str(requests.get("cpu", "")).strip()
+            actual_memory_request = str(requests.get("memory", "")).strip()
+            if expected_cpu_request is not None and actual_cpu_request != expected_cpu_request:
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=_resource_line(doc, "cpu", requests.get("cpu")),
+                        message=(
+                            f"container {name} requests.cpu must be {expected_cpu_request} "
+                            f"when limits.cpu is {cpu_limit}"
+                        ),
+                    )
+                )
+            if expected_memory_request is not None and actual_memory_request != expected_memory_request:
+                violations.append(
+                    Violation(
+                        rule_id="R038",
+                        path=doc.path,
+                        line=_resource_line(doc, "memory", requests.get("memory")),
+                        message=(
+                            f"container {name} requests.memory must be {expected_memory_request} "
+                            f"when limits.memory is {memory_limit}"
+                        ),
                     )
                 )
 
@@ -209,4 +335,5 @@ STORAGE_RULES: Dict[str, Rule] = {
     "R006": Rule("R006", check_image_pull_policy),
     "R011": Rule("R011", check_pvc_storage_limit),
     "R019": Rule("R019", check_database_cluster_component_resources),
+    "R038": Rule("R038", check_managed_workload_resource_ladder),
 }

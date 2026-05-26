@@ -521,6 +521,8 @@ env:
 
 ## Resource Limits Mapping
 
+Compose resource values must be normalized to the Sealos ladder. Use Compose limits only to choose the nearest allowed `limits` tier. Normalize 1G-class memory to `1024Mi`. Ignore Compose reservations for `requests`; Sealos `requests` are derived from the selected `limits` by dropping the last numeric digit, so `1024Mi` maps to `102Mi`.
+
 ### Docker Compose
 ```yaml
 services:
@@ -544,11 +546,11 @@ spec:
         - name: ${{ defaults.app_name }}
           resources:
             limits:
-              cpu: 1000m
+              cpu: 1
               memory: 1024Mi
             requests:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 100m
+              memory: 102Mi
 ```
 
 ## Health Check Mapping

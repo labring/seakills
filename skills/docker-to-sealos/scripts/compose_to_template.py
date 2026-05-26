@@ -89,10 +89,36 @@ FLOATING_NUMERIC_TAG_RE = re.compile(r"^v?\d+(?:\.\d+)?$")
 FLOATING_ALIAS_TAGS = {"latest", "stable", "main", "master", "edge", "nightly", "dev"}
 COMPOSE_BRACED_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 COMPOSE_SIMPLE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+SEALOS_CPU_REQUEST_BY_LIMIT = {
+    "100m": "10m",
+    "200m": "20m",
+    "500m": "50m",
+    "1": "100m",
+    "2": "200m",
+    "3": "300m",
+    "4": "400m",
+    "8": "800m",
+}
+SEALOS_MEMORY_REQUEST_BY_LIMIT = {
+    "128Mi": "12Mi",
+    "256Mi": "25Mi",
+    "512Mi": "51Mi",
+    "1024Mi": "102Mi",
+    "2G": "200Mi",
+    "4G": "400Mi",
+    "8G": "800Mi",
+    "16G": "1600Mi",
+}
 DEFAULT_RESOURCE_LIMITS = {"cpu": "200m", "memory": "256Mi"}
-DEFAULT_RESOURCE_REQUESTS = {"cpu": "20m", "memory": "25Mi"}
+DEFAULT_RESOURCE_REQUESTS = {
+    "cpu": SEALOS_CPU_REQUEST_BY_LIMIT[DEFAULT_RESOURCE_LIMITS["cpu"]],
+    "memory": SEALOS_MEMORY_REQUEST_BY_LIMIT[DEFAULT_RESOURCE_LIMITS["memory"]],
+}
 DB_COMPONENT_RESOURCE_LIMITS = {"cpu": "500m", "memory": "512Mi"}
-DB_COMPONENT_RESOURCE_REQUESTS = {"cpu": "50m", "memory": "51Mi"}
+DB_COMPONENT_RESOURCE_REQUESTS = {
+    "cpu": SEALOS_CPU_REQUEST_BY_LIMIT[DB_COMPONENT_RESOURCE_LIMITS["cpu"]],
+    "memory": SEALOS_MEMORY_REQUEST_BY_LIMIT[DB_COMPONENT_RESOURCE_LIMITS["memory"]],
+}
 ZH_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF]")
 EN_DESCRIPTION_REWRITE_PATTERNS: Tuple[Tuple[re.Pattern[str], str], ...] = (
     (
@@ -1595,10 +1621,7 @@ def build_kafka_resources() -> List[Dict[str, Any]]:
                                 "effect": "NoSchedule",
                             }
                         ],
-                        "resources": {
-                            "limits": {"cpu": "500m", "memory": "512Mi"},
-                            "requests": {"cpu": "50m", "memory": "51Mi"},
-                        },
+                        "resources": db_component_resources(),
                         "volumeClaimTemplates": [
                             {
                                 "name": "data",

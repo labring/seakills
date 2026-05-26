@@ -28,6 +28,26 @@ DB_SECRET_SUFFIXES = (
     "-broker-account-admin",
 )
 MAX_PVC_STORAGE_BYTES = 1024 ** 3  # 1Gi
+SEALOS_CPU_REQUEST_BY_LIMIT = {
+    "100m": "10m",
+    "200m": "20m",
+    "500m": "50m",
+    "1": "100m",
+    "2": "200m",
+    "3": "300m",
+    "4": "400m",
+    "8": "800m",
+}
+SEALOS_MEMORY_REQUEST_BY_LIMIT = {
+    "128Mi": "12Mi",
+    "256Mi": "25Mi",
+    "512Mi": "51Mi",
+    "1024Mi": "102Mi",
+    "2G": "200Mi",
+    "4G": "400Mi",
+    "8G": "800Mi",
+    "16G": "1600Mi",
+}
 DB_COMPONENT_RESOURCE_LIMITS = {"cpu": "500m", "memory": "512Mi"}
 DB_COMPONENT_RESOURCE_REQUESTS = {"cpu": "50m", "memory": "51Mi"}
 STORAGE_UNIT_TO_BYTES = {
