@@ -493,12 +493,14 @@ spec:
    - `${{ defaults.app_name }}-ml`
    - `${{ defaults.app_name }}-redis`
 5. Application Service must include `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and `metadata.name`, both labels, and `spec.selector.app` must be exactly the same
-6. Component-level ConfigMap must include `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both must be consistent with `metadata.name`
-7. Application Ingress's `metadata.name` must be consistent with `metadata.labels.cloud.sealos.io/app-deploy-manager` and the backend `service.name`
+6. Runtime component-level ConfigMap must include `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both must be consistent with `metadata.name`; ConfigMaps used only by init containers to copy initial config into persistent storage must not include either label
+7. Root-path Ingress rules (`pathType: Prefix`, `path: /`) must keep `metadata.name` consistent with `metadata.labels.cloud.sealos.io/app-deploy-manager` and backend `service.name`; non-root or non-Prefix Ingress rules may use a distinct Ingress name and backend service
 
 ### Container Naming Rules
 
-The `containers.name` must be consistent with the `metadata.name` value.
+The primary business container name must be consistent with the workload
+`metadata.name` value. Sidecar/helper containers may use distinct descriptive
+names when they are not the main business container.
 
 ```yaml
 # Correct example
@@ -509,6 +511,7 @@ spec:
     spec:
       containers:
         - name: ${{ defaults.app_name }}  # Must be consistent with metadata.name
+        - name: metrics-sidecar          # Allowed: helper/sidecar container
 
 # Correct example for sub-components
 metadata:
@@ -827,7 +830,7 @@ This is because Kubernetes parses environment variables in the order they appear
 
 All application Deployments or StatefulSets must include the following configurations:
 
-1. **automountServiceAccountToken**: Must be set to `false` to avoid unnecessary permission exposure
+1. **automountServiceAccountToken**: Must be set to `false` to avoid unnecessary permission exposure. Set it to `true` only when the application explicitly needs the Kubernetes API/service account token, evidenced by Kubernetes integration settings, `serviceAccountName`, or `sealos.io/service-account-token-reason` in workload annotations.
 2. **revisionHistoryLimit**: Must be set to `1` to reduce resources consumed by historical revisions
 3. **imagePullSecrets**: Must reference the app-scoped image pull Secret `${{ defaults.app_name }}`
 4. **metadata.annotations**: Must include the following annotations:
@@ -857,7 +860,7 @@ spec:
   revisionHistoryLimit: 1  # Must be set to 1
   template:
     spec:
-      automountServiceAccountToken: false  # Must be set to false
+      automountServiceAccountToken: false  # Default; only set true with evidenced Kubernetes API token need
       imagePullSecrets:
         - name: ${{ defaults.app_name }}
       containers:

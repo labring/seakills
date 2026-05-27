@@ -1102,6 +1102,227 @@ class CheckConsistencyTests(unittest.TestCase):
             )
             self.assertTrue(any(item.rule_id == "R030" for item in violations))
 
+    def test_allows_bootstrap_only_configmap_without_component_labels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: demo
+                data:
+                  vn-tmpvn-configvn-yaml: value
+                ---
+                apiVersion: apps/v1
+                kind: StatefulSet
+                metadata:
+                  name: demo
+                  labels:
+                    app: demo
+                    cloud.sealos.io/app-deploy-manager: demo
+                spec:
+                  revisionHistoryLimit: 1
+                  selector:
+                    matchLabels:
+                      app: demo
+                  template:
+                    spec:
+                      automountServiceAccountToken: false
+                      initContainers:
+                        - name: copy-config
+                          image: alpine:3.20
+                          imagePullPolicy: IfNotPresent
+                          command: ["/bin/sh", "-c", "cp /tmp/config.yaml /etc/demo/config.yaml"]
+                          volumeMounts:
+                            - name: config
+                              mountPath: /tmp/config.yaml
+                              subPath: vn-tmpvn-configvn-yaml
+                            - name: data
+                              mountPath: /etc/demo
+                      containers:
+                        - name: demo
+                          image: nginx:1.27.2
+                          imagePullPolicy: IfNotPresent
+                          volumeMounts:
+                            - name: data
+                              mountPath: /etc/demo
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: demo
+                  volumeClaimTemplates:
+                    - metadata:
+                        name: data
+                      spec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 1Gi
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertFalse(any(item.rule_id == "R030" for item in violations))
+
+    def test_detects_bootstrap_only_configmap_with_component_labels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: demo
+                  labels:
+                    app: demo
+                    cloud.sealos.io/app-deploy-manager: demo
+                data:
+                  vn-tmpvn-configvn-yaml: value
+                ---
+                apiVersion: apps/v1
+                kind: StatefulSet
+                metadata:
+                  name: demo
+                  labels:
+                    app: demo
+                    cloud.sealos.io/app-deploy-manager: demo
+                spec:
+                  revisionHistoryLimit: 1
+                  selector:
+                    matchLabels:
+                      app: demo
+                  template:
+                    spec:
+                      automountServiceAccountToken: false
+                      initContainers:
+                        - name: copy-config
+                          image: alpine:3.20
+                          imagePullPolicy: IfNotPresent
+                          command: ["/bin/sh", "-c", "cp /tmp/config.yaml /etc/demo/config.yaml"]
+                          volumeMounts:
+                            - name: config
+                              mountPath: /tmp/config.yaml
+                              subPath: vn-tmpvn-configvn-yaml
+                            - name: data
+                              mountPath: /etc/demo
+                      containers:
+                        - name: demo
+                          image: nginx:1.27.2
+                          imagePullPolicy: IfNotPresent
+                          volumeMounts:
+                            - name: data
+                              mountPath: /etc/demo
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: demo
+                  volumeClaimTemplates:
+                    - metadata:
+                        name: data
+                      spec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 1Gi
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertTrue(any(item.rule_id == "R030" for item in violations))
+
+    def test_detects_runtime_configmap_missing_component_labels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: demo
+                data:
+                  vn-etcvn-demovn-configvn-yaml: value
+                ---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: demo
+                  labels:
+                    app: demo
+                    cloud.sealos.io/app-deploy-manager: demo
+                spec:
+                  revisionHistoryLimit: 1
+                  selector:
+                    matchLabels:
+                      app: demo
+                  template:
+                    spec:
+                      automountServiceAccountToken: false
+                      containers:
+                        - name: demo
+                          image: nginx:1.27.2
+                          imagePullPolicy: IfNotPresent
+                          volumeMounts:
+                            - name: config
+                              mountPath: /etc/demo/config.yaml
+                              subPath: vn-etcvn-demovn-configvn-yaml
+                      volumes:
+                        - name: config
+                          configMap:
+                            name: demo
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertTrue(any(item.rule_id == "R030" for item in violations))
+
     def test_detects_ingress_backend_name_mismatch_in_artifact(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1173,6 +1394,94 @@ class CheckConsistencyTests(unittest.TestCase):
                       http:
                         paths:
                           - pathType: Prefix
+                            path: /
+                            backend:
+                              service:
+                                name: demo
+                                port:
+                                  number: 8080
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertFalse(any(item.rule_id == "R031" for item in violations))
+
+    def test_allows_non_root_prefix_ingress_backend_name_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: demo-admin
+                  labels:
+                    cloud.sealos.io/app-deploy-manager: demo
+                spec:
+                  rules:
+                    - host: demo.example.com
+                      http:
+                        paths:
+                          - pathType: Prefix
+                            path: /admin
+                            backend:
+                              service:
+                                name: demo
+                                port:
+                                  number: 8080
+                """,
+            )
+
+            violations = CHECKER.run_checks(
+                skill,
+                refs_dir,
+                rules_file,
+                additional_include_paths=["template/demo/index.yaml"],
+            )
+            self.assertFalse(any(item.rule_id == "R031" for item in violations))
+
+    def test_allows_exact_root_ingress_backend_name_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            skill = root / "SKILL.md"
+            refs_dir = root / "references"
+            refs_file = refs_dir / "sample.md"
+            rules_file = refs_dir / "rules-registry.yaml"
+            artifact_file = root / "template" / "demo" / "index.yaml"
+
+            write_file(skill, "# no yaml snippets\n")
+            write_file(refs_file, "# refs\n")
+            write_registry(rules_file)
+            write_file(
+                artifact_file,
+                """
+                apiVersion: networking.k8s.io/v1
+                kind: Ingress
+                metadata:
+                  name: demo-redirect
+                  labels:
+                    cloud.sealos.io/app-deploy-manager: demo
+                spec:
+                  rules:
+                    - host: demo.example.com
+                      http:
+                        paths:
+                          - pathType: Exact
                             path: /
                             backend:
                               service:
@@ -2459,6 +2768,34 @@ class CheckConsistencyTests(unittest.TestCase):
         )
         self.assertFalse(any(item.rule_id in {"R034", "R028"} for item in violations))
 
+    def test_allows_sidecar_container_name_when_primary_matches_workload(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: StatefulSet
+            metadata:
+              name: demo
+              labels:
+                cloud.sealos.io/app-deploy-manager: demo
+                app: demo
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                spec:
+                  automountServiceAccountToken: false
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+                    - name: demo-sidecar
+                      image: busybox:1.36.1
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R028" for item in violations))
+
     def test_detects_missing_revision_history_limit(self):
         violations = self.run_checker(
             """
@@ -2504,6 +2841,59 @@ class CheckConsistencyTests(unittest.TestCase):
             """
         )
         self.assertTrue(any(item.rule_id == "R010" for item in violations))
+
+    def test_detects_unjustified_automount_service_account_token_true(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+              labels:
+                app: demo
+                cloud.sealos.io/app-deploy-manager: demo
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                spec:
+                  automountServiceAccountToken: true
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertTrue(any(item.rule_id == "R010" for item in violations))
+
+    def test_allows_documented_kubernetes_service_account_token_usage(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+              labels:
+                app: demo
+                cloud.sealos.io/app-deploy-manager: demo
+              annotations:
+                sealos.io/service-account-token-reason: "Headplane Kubernetes integration needs the service account token to list pods"
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                spec:
+                  serviceAccountName: demo
+                  automountServiceAccountToken: true
+                  containers:
+                    - name: demo
+                      image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R010" for item in violations))
 
     def test_detects_pvc_storage_over_limit(self):
         violations = self.run_checker(

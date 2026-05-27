@@ -117,11 +117,11 @@ If validation fails, fix template/rules/examples first.
 - Never use `spec.template` in App resource.
 - `cloud.sealos.io/app-deploy-manager` label value must equal resource `metadata.name`.
 - `metadata.labels.app` label value must equal resource `metadata.name` for managed app workloads.
-- `containers[*].name` must equal workload `metadata.name` for managed app workloads.
+- The primary business container name must equal workload `metadata.name` for managed app workloads; sidecar/helper containers may use distinct descriptive names.
 - Application `Service` resources must define `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both labels must match `spec.selector.app`.
-- Component-scoped `ConfigMap` resources must define `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both labels must match `metadata.name`.
+- Runtime component-scoped `ConfigMap` resources must define `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both labels must match `metadata.name`; bootstrap-only ConfigMaps used only by init containers to copy initial config into persistent storage must not define either label.
 - Application `Service` resources must use the same component name across `metadata.name`, `metadata.labels.app`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and `spec.selector.app`.
-- Application `Ingress` resources must use the same component name across `metadata.name`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and backend `service.name`.
+- Root-path `Ingress` resources (`pathType: Prefix`, `path: /`) must use the same component name across `metadata.name`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and backend `service.name`; non-root or non-Prefix Ingress rules may route to a different backend service.
 - Service `spec.ports[*].name` must be explicitly set (required for multi-port services).
 - HTTP Ingress must include required nginx annotations (`kubernetes.io/ingress.class`, `nginx.ingress.kubernetes.io/proxy-body-size`, `nginx.ingress.kubernetes.io/server-snippet`, `nginx.ingress.kubernetes.io/ssl-redirect`, `nginx.ingress.kubernetes.io/backend-protocol`, `nginx.ingress.kubernetes.io/client-body-buffer-size`, `nginx.ingress.kubernetes.io/proxy-buffer-size`, `nginx.ingress.kubernetes.io/proxy-send-timeout`, `nginx.ingress.kubernetes.io/proxy-read-timeout`, `nginx.ingress.kubernetes.io/configuration-snippet`) with expected defaults.
 - CronJob resources must define labels `cloud.sealos.io/cronjob`, `cronjob-launchpad-name`, and `cronjob-type`; `cloud.sealos.io/cronjob` must equal `metadata.name`, `cronjob-launchpad-name` must be `""`, and `cronjob-type` must be `image`.
@@ -188,7 +188,7 @@ Unless source docs explicitly require otherwise, use the lightweight app ladder 
 - container limits: `cpu=200m`, `memory=256Mi`
 - container requests: `cpu=20m`, `memory=25Mi`
 - `revisionHistoryLimit: 1`
-- `automountServiceAccountToken: false`
+- `automountServiceAccountToken: false` by default; set it to `true` only when the application has explicit Kubernetes API/service account token requirements, evidenced by Kubernetes integration settings, `serviceAccountName`, or a `sealos.io/service-account-token-reason` workload annotation.
 
 For higher resource needs, move only to another allowed `limits` ladder entry and recompute `requests` from that `limits` value.
 

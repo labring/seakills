@@ -68,7 +68,7 @@ must_rules:
     enforcement:
       type: rule
       target: R034
-  - must: "`containers[*].name` must equal workload `metadata.name` for managed app workloads."
+  - must: "The primary business container name must equal workload `metadata.name` for managed app workloads; sidecar/helper containers may use distinct descriptive names."
     enforcement:
       type: rule
       target: R028
@@ -76,7 +76,7 @@ must_rules:
     enforcement:
       type: rule
       target: R029
-  - must: "Component-scoped `ConfigMap` resources must define `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both labels must match `metadata.name`."
+  - must: "Runtime component-scoped `ConfigMap` resources must define `metadata.labels.app` and `metadata.labels.cloud.sealos.io/app-deploy-manager`, and both labels must match `metadata.name`; bootstrap-only ConfigMaps used only by init containers to copy initial config into persistent storage must not define either label."
     enforcement:
       type: rule
       target: R030
@@ -84,7 +84,7 @@ must_rules:
     enforcement:
       type: rule
       target: R029
-  - must: "Application `Ingress` resources must use the same component name across `metadata.name`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and backend `service.name`."
+  - must: "Root-path `Ingress` resources (`pathType: Prefix`, `path: /`) must use the same component name across `metadata.name`, `metadata.labels.cloud.sealos.io/app-deploy-manager`, and backend `service.name`; non-root or non-Prefix Ingress rules may route to a different backend service."
     enforcement:
       type: rule
       target: R031
@@ -240,6 +240,42 @@ must_rules:
     enforcement:
       type: rule
       target: R038
+  - must: "Do not treat a short smoke test as proof of a stable minimum memory value."
+    enforcement:
+      type: manual
+      note: "Review browser/remote desktop templates and smoke evidence before lowering memory."
+  - must: "Validate memory with a fresh deployment, not only a patched warm pod."
+    enforcement:
+      type: manual
+      note: "Requires deployment evidence outside static YAML validation."
+  - must: "Exercise cold start until readiness, a lightweight page, a real/medium page, an interactive/search page, and a 60s post-smoke stability check."
+    enforcement:
+      type: manual
+      note: "Requires runtime smoke coverage evidence."
+  - must: "If observed cgroup memory reaches more than 80% of the limit during smoke, move to the next allowed Sealos memory ladder value."
+    enforcement:
+      type: manual
+      note: "Requires runtime memory observation."
+  - must: "Keep requests derived from limits according to the Sealos resource ladder."
+    enforcement:
+      type: rule
+      target: R038
+  - must: "Bad: Chrome passes a short smoke at `512Mi` but reaches `503Mi`; shipping `512Mi` as the stable minimum is unsafe."
+    enforcement:
+      type: manual
+      note: "Negative example for reviewer guidance."
+  - must: "Good: raise to `1024Mi`, set request to `102Mi`, rerun smoke and stability checks."
+    enforcement:
+      type: manual
+      note: "Positive example for reviewer guidance."
+  - must: "limits: `cpu=200m`, `memory=1024Mi`"
+    enforcement:
+      type: manual
+      note: "Browser/remote desktop minimum; applied when source workload matches that class."
+  - must: "requests: `cpu=20m`, `memory=102Mi`"
+    enforcement:
+      type: manual
+      note: "Browser/remote desktop minimum request; applied when source workload matches that class."
   - must: "MongoDB: `${{ defaults.app_name }}-mongo-mongodb-account-root` (or `${{ defaults.app_name }}-mongodb-mongodb-account-root` when the MongoDB cluster name uses `-mongodb`)"
     enforcement:
       type: rule
@@ -268,7 +304,7 @@ must_rules:
     enforcement:
       type: rule
       target: R009
-  - must: "`automountServiceAccountToken: false`"
+  - must: "`automountServiceAccountToken: false` by default; set it to `true` only when the application has explicit Kubernetes API/service account token requirements, evidenced by Kubernetes integration settings, `serviceAccountName`, or a `sealos.io/service-account-token-reason` workload annotation."
     enforcement:
       type: rule
       target: R010

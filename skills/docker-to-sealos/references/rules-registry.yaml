@@ -98,22 +98,22 @@ rules:
     description: Managed app workloads must define metadata.labels.app and match metadata.name.
     severity: error
   - id: R028
-    description: Managed app workload container names must exactly match metadata.name.
+    description: Managed app workloads must include a primary business container whose name exactly matches metadata.name.
     severity: error
   - id: R029
     description: Application Services must use one component name across metadata.name, labels.app, cloud.sealos.io/app-deploy-manager, and spec.selector.app.
     severity: error
   - id: R030
-    description: Component ConfigMaps must use one component name across metadata.name, labels.app, and cloud.sealos.io/app-deploy-manager.
+    description: Runtime component ConfigMaps must use one component name across metadata.name, labels.app, and cloud.sealos.io/app-deploy-manager; bootstrap-only init-copy ConfigMaps must not define either managed label.
     severity: error
   - id: R031
-    description: Application Ingress resources must use one component name across metadata.name, cloud.sealos.io/app-deploy-manager, and backend service names.
+    description: Root-path Prefix Ingress resources must use one component name across metadata.name, cloud.sealos.io/app-deploy-manager, and backend service names; non-root or non-Prefix routes may differ.
     severity: error
   - id: R009
     description: Managed app workloads must explicitly set revisionHistoryLimit to 1.
     severity: error
   - id: R010
-    description: Managed app workloads must explicitly set automountServiceAccountToken to false.
+    description: Managed app workloads must explicitly set automountServiceAccountToken to false unless Kubernetes API/service account token usage is evidenced by integration settings, serviceAccountName, or a service-account-token reason annotation.
     severity: error
   - id: R035
     description: Managed app workloads must reference the app-scoped image pull secret name via template.spec.imagePullSecrets.

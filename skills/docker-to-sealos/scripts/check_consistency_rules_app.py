@@ -657,34 +657,27 @@ def check_container_names_match_workload_name(context: ScanContext) -> List[Viol
         if not isinstance(containers, list):
             continue
 
-        for container in containers:
-            if not isinstance(container, dict):
-                continue
-            container_name = container.get("name")
-            if isinstance(container_name, str) and container_name.strip() == workload_name:
-                continue
+        has_primary_container = any(
+            isinstance(container, dict)
+            and isinstance(container.get("name"), str)
+            and container["name"].strip() == workload_name
+            for container in containers
+        )
+        if has_primary_container:
+            continue
 
-            if isinstance(container_name, str) and container_name.strip():
-                pattern = rf"^\s*-\s*name\s*:\s*{re.escape(container_name.strip())}\s*$"
-                message = (
-                    f"container name '{container_name.strip()}' must exactly match metadata.name "
-                    f"'{workload_name}' for managed app workloads"
-                )
-            else:
-                pattern = r"^\s*-\s*name\s*:"
-                message = (
-                    "container name is required and must exactly match metadata.name "
-                    "for managed app workloads"
-                )
-
-            add_doc_violation(
-                violations,
-                rule_id="R028",
-                doc=doc,
-                pattern=pattern,
-                default_pattern=r"^\s*containers\s*:",
-                message=message,
-            )
+        add_doc_violation(
+            violations,
+            rule_id="R028",
+            doc=doc,
+            pattern=r"^\s*containers\s*:",
+            default_pattern=r"^\s*containers\s*:",
+            message=(
+                "managed app workloads must include a primary business container "
+                f"named exactly like metadata.name '{workload_name}'; sidecar/helper "
+                "containers may use distinct names"
+            ),
+        )
 
     return violations
 
@@ -857,6 +850,141 @@ def check_service_labels_match_selector_app(context: ScanContext) -> List[Violat
     return violations
 
 
+def _configmap_volume_names(template_spec: Dict[str, Any], configmap_name: str) -> set[str]:
+    names: set[str] = set()
+    volumes = template_spec.get("volumes")
+    if not isinstance(volumes, list):
+        return names
+
+    for volume in volumes:
+        if not isinstance(volume, dict):
+            continue
+        volume_name = volume.get("name")
+        if not isinstance(volume_name, str) or not volume_name.strip():
+            continue
+
+        config_map = volume.get("configMap")
+        if isinstance(config_map, dict) and config_map.get("name") == configmap_name:
+            names.add(volume_name.strip())
+            continue
+
+        projected = volume.get("projected")
+        sources = projected.get("sources") if isinstance(projected, dict) else None
+        if not isinstance(sources, list):
+            continue
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            source_config_map = source.get("configMap")
+            if isinstance(source_config_map, dict) and source_config_map.get("name") == configmap_name:
+                names.add(volume_name.strip())
+                break
+
+    return names
+
+
+def _volume_mount_names(container: Dict[str, Any]) -> set[str]:
+    mounts = container.get("volumeMounts")
+    if not isinstance(mounts, list):
+        return set()
+    return {
+        item["name"].strip()
+        for item in mounts
+        if isinstance(item, dict)
+        and isinstance(item.get("name"), str)
+        and item["name"].strip()
+    }
+
+
+def _persistent_volume_names(data: Dict[str, Any], template_spec: Dict[str, Any]) -> set[str]:
+    names: set[str] = set()
+    spec = data.get("spec")
+    claim_templates = spec.get("volumeClaimTemplates") if isinstance(spec, dict) else None
+    if isinstance(claim_templates, list):
+        for claim_template in claim_templates:
+            metadata = claim_template.get("metadata") if isinstance(claim_template, dict) else None
+            name = metadata.get("name") if isinstance(metadata, dict) else None
+            if isinstance(name, str) and name.strip():
+                names.add(name.strip())
+
+    volumes = template_spec.get("volumes")
+    if isinstance(volumes, list):
+        for volume in volumes:
+            if not isinstance(volume, dict):
+                continue
+            name = volume.get("name")
+            if isinstance(name, str) and name.strip() and isinstance(volume.get("persistentVolumeClaim"), dict):
+                names.add(name.strip())
+
+    return names
+
+
+def _container_command_text(container: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    for key in ("command", "args"):
+        value = container.get(key)
+        if isinstance(value, list):
+            parts.extend(str(item) for item in value)
+        elif isinstance(value, str):
+            parts.append(value)
+    return "\n".join(parts)
+
+
+def _looks_like_copy_to_storage(container: Dict[str, Any]) -> bool:
+    command_text = _container_command_text(container).lower()
+    copy_markers = ("cp ", "cp\t", "rsync", "install ", "tee ", "cat ")
+    return any(marker in command_text for marker in copy_markers)
+
+
+def _is_bootstrap_only_configmap(context: ScanContext, configmap_name: str) -> bool:
+    saw_bootstrap_reference = False
+
+    for workload_doc in context.yaml_documents:
+        if not is_app_workload_document(workload_doc):
+            continue
+        if not isinstance(workload_doc.data, dict):
+            continue
+
+        template_spec = get_template_spec(workload_doc.data)
+        if not isinstance(template_spec, dict):
+            continue
+
+        configmap_volume_names = _configmap_volume_names(template_spec, configmap_name)
+        if not configmap_volume_names:
+            continue
+
+        containers = template_spec.get("containers")
+        if isinstance(containers, list):
+            for container in containers:
+                if isinstance(container, dict) and _volume_mount_names(container) & configmap_volume_names:
+                    return False
+
+        persistent_volume_names = _persistent_volume_names(workload_doc.data, template_spec)
+        init_containers = template_spec.get("initContainers")
+        if not isinstance(init_containers, list):
+            return False
+
+        matched_bootstrap_container = False
+        for container in init_containers:
+            if not isinstance(container, dict):
+                continue
+            mounts = _volume_mount_names(container)
+            if not mounts & configmap_volume_names:
+                continue
+            if not mounts & persistent_volume_names:
+                return False
+            if not _looks_like_copy_to_storage(container):
+                return False
+            matched_bootstrap_container = True
+
+        if matched_bootstrap_container:
+            saw_bootstrap_reference = True
+        else:
+            return False
+
+    return saw_bootstrap_reference
+
+
 def check_configmap_labels_match_name(context: ScanContext) -> List[Violation]:
     violations: List[Violation] = []
     cloud_label_key = "cloud.sealos.io/app-deploy-manager"
@@ -877,6 +1005,27 @@ def check_configmap_labels_match_name(context: ScanContext) -> List[Violation]:
         if not isinstance(metadata_name, str) or not metadata_name.strip():
             continue
         metadata_name = metadata_name.strip()
+
+        if _is_bootstrap_only_configmap(context, metadata_name):
+            if app_label is not None:
+                add_doc_violation(
+                    violations,
+                    rule_id="R030",
+                    doc=doc,
+                    pattern=r"^\s*app\s*:",
+                    default_pattern=r"^\s*labels\s*:",
+                    message="Bootstrap-only ConfigMap must not define metadata.labels.app",
+                )
+            if cloud_label is not None:
+                add_doc_violation(
+                    violations,
+                    rule_id="R030",
+                    doc=doc,
+                    pattern=re.escape(cloud_label_key),
+                    default_pattern=r"^\s*labels\s*:",
+                    message="Bootstrap-only ConfigMap must not define metadata.labels.cloud.sealos.io/app-deploy-manager",
+                )
+            continue
 
         if not isinstance(app_label, str) or not app_label.strip():
             add_doc_violation(
@@ -919,7 +1068,7 @@ def check_configmap_labels_match_name(context: ScanContext) -> List[Violation]:
     return violations
 
 
-def _iter_ingress_backend_service_names(data: Dict[str, Any]) -> Iterable[str]:
+def _iter_root_prefix_ingress_backend_service_names(data: Dict[str, Any]) -> Iterable[str]:
     spec = data.get("spec")
     rules = spec.get("rules") if isinstance(spec, dict) else None
     if not isinstance(rules, list):
@@ -930,6 +1079,10 @@ def _iter_ingress_backend_service_names(data: Dict[str, Any]) -> Iterable[str]:
         if not isinstance(paths, list):
             continue
         for path in paths:
+            if not isinstance(path, dict):
+                continue
+            if path.get("pathType") != "Prefix" or path.get("path") != "/":
+                continue
             backend = path.get("backend") if isinstance(path, dict) else None
             service = backend.get("service") if isinstance(backend, dict) else None
             service_name = service.get("name") if isinstance(service, dict) else None
@@ -955,6 +1108,9 @@ def check_ingress_name_matches_backends(context: ScanContext) -> List[Violation]
         if not isinstance(metadata_name, str) or not metadata_name.strip():
             continue
         metadata_name = metadata_name.strip()
+        root_prefix_backend_names = list(_iter_root_prefix_ingress_backend_service_names(doc.data))
+        if not root_prefix_backend_names:
+            continue
 
         if not isinstance(cloud_label, str) or not cloud_label.strip():
             add_doc_violation(
@@ -975,7 +1131,7 @@ def check_ingress_name_matches_backends(context: ScanContext) -> List[Violation]
                 message="Ingress metadata.labels.cloud.sealos.io/app-deploy-manager must match metadata.name",
             )
 
-        for backend_name in _iter_ingress_backend_service_names(doc.data):
+        for backend_name in root_prefix_backend_names:
             if backend_name == metadata_name:
                 continue
             add_doc_violation(
@@ -1489,6 +1645,13 @@ def check_revision_history_limit(context: ScanContext) -> List[Violation]:
     )
 
 
+SERVICE_ACCOUNT_TOKEN_REASON_ANNOTATION = "sealos.io/service-account-token-reason"
+SERVICE_ACCOUNT_TOKEN_REASON_RE = re.compile(
+    r"\b(k8s|kubernetes|service\s*account|serviceaccount|token|api)\b",
+    re.IGNORECASE,
+)
+
+
 def _extract_automount_service_account_token(data: dict) -> object:
     template_spec = get_template_spec(data)
     if not isinstance(template_spec, dict):
@@ -1496,17 +1659,91 @@ def _extract_automount_service_account_token(data: dict) -> object:
     return template_spec.get("automountServiceAccountToken")
 
 
-def check_automount_service_account_token(context: ScanContext) -> List[Violation]:
-    return check_managed_workload_setting(
-        context,
-        rule_id="R010",
-        value_extractor=_extract_automount_service_account_token,
-        expected=False,
-        value_pattern=r"^\s*automountServiceAccountToken\s*:",
-        fallback_pattern=r"^\s*template\s*:",
-        missing_message="managed app workloads must explicitly set automountServiceAccountToken: false",
-        mismatch_message="automountServiceAccountToken must be false for managed app workloads",
+def _service_account_token_reason(data: Dict[str, Any]) -> str:
+    metadata = data.get("metadata")
+    annotations = metadata.get("annotations") if isinstance(metadata, dict) else None
+    reason = annotations.get(SERVICE_ACCOUNT_TOKEN_REASON_ANNOTATION) if isinstance(annotations, dict) else None
+    return reason.strip() if isinstance(reason, str) else ""
+
+
+def _has_service_account_token_usage_evidence(data: Dict[str, Any]) -> bool:
+    reason = _service_account_token_reason(data)
+    if reason and SERVICE_ACCOUNT_TOKEN_REASON_RE.search(reason):
+        return True
+
+    template_spec = get_template_spec(data)
+    if not isinstance(template_spec, dict):
+        return False
+
+    if isinstance(template_spec.get("serviceAccountName"), str) and template_spec["serviceAccountName"].strip():
+        return True
+
+    command_text_parts: List[str] = []
+    for container in iter_containers(data):
+        if not isinstance(container, dict):
+            continue
+        for key in ("command", "args"):
+            value = container.get(key)
+            if isinstance(value, list):
+                command_text_parts.extend(str(item) for item in value)
+            elif isinstance(value, str):
+                command_text_parts.append(value)
+        for env_item in container.get("env", []) if isinstance(container.get("env"), list) else []:
+            if not isinstance(env_item, dict):
+                continue
+            env_name = env_item.get("name")
+            env_value = env_item.get("value")
+            if isinstance(env_name, str):
+                command_text_parts.append(env_name)
+            if isinstance(env_value, str):
+                command_text_parts.append(env_value)
+
+    command_text = "\n".join(command_text_parts).lower()
+    return any(
+        marker in command_text
+        for marker in (
+            "kubernetes.default.svc",
+            "/var/run/secrets/kubernetes.io/serviceaccount",
+            "serviceaccount",
+            "service_account",
+            "kubeconfig",
+        )
     )
+
+
+def check_automount_service_account_token(context: ScanContext) -> List[Violation]:
+    violations: List[Violation] = []
+    for doc in context.yaml_documents:
+        if doc.skip_checks or not is_app_workload_document(doc) or not has_managed_workload_marker(doc.data):
+            continue
+        if not isinstance(doc.data, dict):
+            continue
+
+        value = _extract_automount_service_account_token(doc.data)
+        if value is False:
+            continue
+        if value is True and _has_service_account_token_usage_evidence(doc.data):
+            continue
+
+        if value is True:
+            message = (
+                "automountServiceAccountToken may be true only when Kubernetes API/service account "
+                "token usage is evidenced by integration settings, serviceAccountName, or "
+                f"{SERVICE_ACCOUNT_TOKEN_REASON_ANNOTATION}"
+            )
+        else:
+            message = "managed app workloads must explicitly set automountServiceAccountToken: false"
+
+        add_doc_violation(
+            violations,
+            rule_id="R010",
+            doc=doc,
+            pattern=r"^\s*automountServiceAccountToken\s*:",
+            default_pattern=r"^\s*template\s*:",
+            message=message,
+        )
+
+    return violations
 
 
 def check_image_pull_secret_refs(context: ScanContext) -> List[Violation]:
