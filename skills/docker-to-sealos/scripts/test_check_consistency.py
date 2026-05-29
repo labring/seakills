@@ -2498,7 +2498,7 @@ class CheckConsistencyTests(unittest.TestCase):
         )
         self.assertFalse(any(item.rule_id in {"R007", "R035"} for item in violations))
 
-    def test_detects_missing_registry_pull_secret_reference(self):
+    def test_allows_public_image_without_image_pull_secrets(self):
         violations = self.run_checker(
             """
             ```yaml
@@ -2522,6 +2522,38 @@ class CheckConsistencyTests(unittest.TestCase):
                   containers:
                     - name: demo
                       image: nginx:1.27.2
+                      imagePullPolicy: IfNotPresent
+            ```
+            """
+        )
+        self.assertFalse(any(item.rule_id == "R035" for item in violations))
+
+    def test_detects_invalid_registry_pull_secret_reference(self):
+        violations = self.run_checker(
+            """
+            ```yaml
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: demo
+              labels:
+                app: demo
+                cloud.sealos.io/app-deploy-manager: demo
+              annotations:
+                originImageName: registry.example.com/private/demo:1.0.0
+            spec:
+              revisionHistoryLimit: 1
+              template:
+                metadata:
+                  labels:
+                    app: demo
+                spec:
+                  automountServiceAccountToken: false
+                  imagePullSecrets:
+                    - name: custom-pull-secret
+                  containers:
+                    - name: demo
+                      image: registry.example.com/private/demo:1.0.0
                       imagePullPolicy: IfNotPresent
             ```
             """

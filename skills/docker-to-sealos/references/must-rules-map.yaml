@@ -132,7 +132,7 @@ must_rules:
     enforcement:
       type: rule
       target: R015
-  - must: "Managed app workloads must reference the app-scoped image pull Secret `${{ defaults.app_name }}` via `template.spec.imagePullSecrets`."
+  - must: "Public-image managed app workloads must omit `template.spec.imagePullSecrets`; private-registry workloads may reference only the app-scoped pull Secret `${{ defaults.app_name }}`."
     enforcement:
       type: rule
       target: R035
@@ -172,7 +172,7 @@ must_rules:
     enforcement:
       type: rule
       target: R007
-  - must: "A dedicated app-scoped registry pull Secret is allowed and should be referenced only through `template.spec.imagePullSecrets`."
+  - must: "A dedicated app-scoped registry pull Secret is allowed only for private-registry images and must be referenced only through `template.spec.imagePullSecrets`; public images must not add pull secrets."
     enforcement:
       type: rule
       target: R035

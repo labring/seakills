@@ -453,8 +453,6 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false
-      imagePullSecrets:
-        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           volumeMounts:
@@ -832,7 +830,7 @@ All application Deployments or StatefulSets must include the following configura
 
 1. **automountServiceAccountToken**: Must be set to `false` to avoid unnecessary permission exposure. Set it to `true` only when the application explicitly needs the Kubernetes API/service account token, evidenced by Kubernetes integration settings, `serviceAccountName`, or `sealos.io/service-account-token-reason` in workload annotations.
 2. **revisionHistoryLimit**: Must be set to `1` to reduce resources consumed by historical revisions
-3. **imagePullSecrets**: Must reference the app-scoped image pull Secret `${{ defaults.app_name }}`
+3. **imagePullSecrets**: Omit for public images. For private-registry images, reference only the app-scoped pull Secret `${{ defaults.app_name }}`
 4. **metadata.annotations**: Must include the following annotations:
    - `originImageName`: Original image name
    - `deploy.cloud.sealos.io/minReplicas`: Minimum replica count, typically set to `'1'`
@@ -840,9 +838,9 @@ All application Deployments or StatefulSets must include the following configura
 
 Recommended registry pull Secret model:
 
-- Managed workloads reference `${{ defaults.app_name }}` in `imagePullSecrets`
-- `sealos-deploy` creates or refreshes that Secret automatically from local `gh` CLI credentials when the image is a private GHCR image
-- If the template is deployed outside `sealos-deploy`, the operator must create the Secret manually before applying the workload
+- Public-image managed workloads omit `imagePullSecrets`
+- For private GHCR images, `sealos-deploy` creates or refreshes `${{ defaults.app_name }}` from local `gh` CLI credentials and the workload may reference it through `imagePullSecrets`
+- If a private-registry template is deployed outside `sealos-deploy`, the operator must create the Secret manually before applying the workload
 
 ```yaml
 apiVersion: apps/v1
@@ -861,8 +859,6 @@ spec:
   template:
     spec:
       automountServiceAccountToken: false  # Default; only set true with evidenced Kubernetes API token need
-      imagePullSecrets:
-        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           # Other container configuration...
@@ -894,8 +890,6 @@ spec:
         app: ${{ defaults.app_name }}
     spec:
       automountServiceAccountToken: false  # Disable automatic service account token mounting
-      imagePullSecrets:
-        - name: ${{ defaults.app_name }}
       containers:
         - name: ${{ defaults.app_name }}
           image: example/app:1.0.0
