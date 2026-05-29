@@ -125,10 +125,7 @@ class ComposeToTemplateTests(unittest.TestCase):
                 ingress["metadata"]["labels"]["cloud.sealos.io/app-deploy-manager"],
             )
             workload = next(doc for doc in docs if doc.get("kind") == "Deployment")
-            self.assertEqual(
-                [{"name": "${{ defaults.app_name }}"}],
-                workload["spec"]["template"]["spec"]["imagePullSecrets"],
-            )
+            self.assertNotIn("imagePullSecrets", workload["spec"]["template"]["spec"])
             self.assertEqual(
                 {
                     "kubernetes.io/ingress.class": "nginx",

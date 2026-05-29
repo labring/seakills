@@ -1826,6 +1826,12 @@ def check_image_pull_secret_refs(context: ScanContext) -> List[Violation]:
         template_spec = get_template_spec(doc.data)
         image_pull_secrets = template_spec.get("imagePullSecrets") if isinstance(template_spec, dict) else None
 
+        # Public images should omit imagePullSecrets entirely. When a private-registry
+        # workload does declare pull secrets, only the app-scoped runtime-managed
+        # secret is allowed so templates do not depend on undeclared custom secrets.
+        if image_pull_secrets is None:
+            continue
+
         referenced_names: List[str] = []
         if isinstance(image_pull_secrets, list):
             for item in image_pull_secrets:
@@ -1835,7 +1841,7 @@ def check_image_pull_secret_refs(context: ScanContext) -> List[Violation]:
                 if isinstance(name, str) and name.strip():
                     referenced_names.append(name.strip())
 
-        if "${{ defaults.app_name }}" in referenced_names:
+        if referenced_names == ["${{ defaults.app_name }}"]:
             continue
 
         add_doc_violation(
@@ -1845,8 +1851,9 @@ def check_image_pull_secret_refs(context: ScanContext) -> List[Violation]:
             pattern=r"^\s*imagePullSecrets\s*:",
             default_pattern=r"^\s*template\s*:",
             message=(
-                "managed app workloads must reference the app-scoped image pull secret "
-                "`${{ defaults.app_name }}` via template.spec.imagePullSecrets"
+                "imagePullSecrets may be omitted for public images; if declared for "
+                "private-registry workloads, it must reference only the app-scoped "
+                "secret `${{ defaults.app_name }}`"
             ),
         )
 

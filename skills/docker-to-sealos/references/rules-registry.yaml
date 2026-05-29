@@ -119,7 +119,7 @@ rules:
     description: Managed app workloads must explicitly set automountServiceAccountToken to false unless Kubernetes API/service account token usage is evidenced by integration settings, serviceAccountName, or a service-account-token reason annotation.
     severity: error
   - id: R035
-    description: Managed app workloads must reference the app-scoped image pull secret name via template.spec.imagePullSecrets.
+    description: Managed app workloads that declare imagePullSecrets must reference only the app-scoped pull secret name via template.spec.imagePullSecrets; public-image workloads may omit imagePullSecrets.
     severity: error
   - id: R011
     description: All PVC storage requests must be concrete values and less than or equal to 1Gi.
